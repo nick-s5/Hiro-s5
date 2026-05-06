@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import Foundation
 
 private let perAppTimeout: TimeInterval = 0.5
@@ -246,7 +247,25 @@ final class AXManager {
         }
 
         let visibleWindows = SkyLight.shared.queryAllVisibleWindows()
-        let pidsWithWindows = Set(visibleWindows.map { $0.pid })
+        var pidsWithWindows = Set(visibleWindows.map { $0.pid })
+
+        // Some Electron apps are missed by the broad SLS enumeration but are
+        // visible through CGWindowList. Add regular rendered windows from the
+        // public API without changing apps already discovered through SLS.
+        if let cgWindows = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] {
+            for window in cgWindows {
+                guard let pidNumber = window[kCGWindowOwnerPID as String] as? Int,
+                      let layer = window[kCGWindowLayer as String] as? Int,
+                      layer == 0,
+                      let alpha = window[kCGWindowAlpha as String] as? Double,
+                      alpha > 0
+                else { continue }
+                pidsWithWindows.insert(pid_t(pidNumber))
+            }
+        }
 
         let apps = NSWorkspace.shared.runningApplications.filter {
             shouldTrack($0) && pidsWithWindows.contains($0.processIdentifier)

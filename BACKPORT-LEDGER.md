@@ -64,6 +64,22 @@ Reason: Applies without manual edits, touches only Swift/test files, and passes 
 Backport commit: this commit
 ```
 
+### `cbceeab7cd41d971c270dff87cfdc1cbf90a1577`
+
+```text
+Commit: cbceeab7cd41d971c270dff87cfdc1cbf90a1577
+Original subject: Fix: include CGWindowList in pidsWithWindows to catch Electron windows SLS misses
+Touched Swift files:
+- Sources/OmniWM/Core/Ax/AXManager.swift
+Touched Zig/build files: none
+Bug reproducible on 6fde9b9? unknown; source commit fixes an SLS enumeration blind spot that can also affect the Swift-only AX discovery path
+Tests added or updated:
+- AXManagerTests
+Action: direct-dry-run
+Reason: Cherry-pick applies cleanly, touches only Swift AX discovery code, and passes the staged no-Zig audit. The explanatory comment was trimmed to ASCII while preserving the CGWindowList fallback rationale.
+Backport commit: this commit
+```
+
 ### `b18487723117ae927e720262c36ab962e38fe5ed`
 
 ```text
