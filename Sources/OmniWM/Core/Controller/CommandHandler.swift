@@ -49,6 +49,14 @@ final class CommandHandler {
             controller.niriLayoutHandler.moveWindowOrToAdjacentWorkspace(direction: .down)
         case .moveWindowUpOrToWorkspaceUp:
             controller.niriLayoutHandler.moveWindowOrToAdjacentWorkspace(direction: .up)
+        case .consumeOrExpelWindowLeft:
+            controller.niriLayoutHandler.consumeOrExpelWindow(direction: .left)
+        case .consumeOrExpelWindowRight:
+            controller.niriLayoutHandler.consumeOrExpelWindow(direction: .right)
+        case .consumeWindowIntoColumn:
+            controller.niriLayoutHandler.consumeWindowIntoColumn()
+        case .expelWindowFromColumn:
+            controller.niriLayoutHandler.expelWindowFromColumn()
         case let .moveToWorkspace(index):
             controller.workspaceNavigationHandler.moveFocusedWindow(toWorkspaceIndex: index)
         case .moveWindowToWorkspaceUp:

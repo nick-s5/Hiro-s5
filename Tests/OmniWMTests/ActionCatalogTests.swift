@@ -57,10 +57,16 @@ import Testing
     @Test func niriWindowMoveActionsUsePublicCommandDescriptors() throws {
         let down = try #require(ActionCatalog.spec(for: "moveWindowDown"))
         let fallback = try #require(ActionCatalog.spec(for: "moveWindowDownOrToWorkspaceDown"))
+        let consume = try #require(ActionCatalog.spec(for: "consumeWindowIntoColumn"))
+        let expel = try #require(ActionCatalog.spec(for: "expelWindowFromColumn"))
 
         #expect(down.ipcCommandName == .moveWindowDown)
         #expect(down.ipcDescriptor?.path == "command move-window-down")
         #expect(fallback.ipcCommandName == .moveWindowDownOrToWorkspaceDown)
         #expect(fallback.ipcDescriptor?.path == "command move-window-down-or-to-workspace-down")
+        #expect(consume.ipcCommandName == .consumeWindowIntoColumn)
+        #expect(consume.ipcDescriptor?.path == "command consume-window-into-column")
+        #expect(expel.ipcCommandName == .expelWindowFromColumn)
+        #expect(expel.ipcDescriptor?.path == "command expel-window-from-column")
     }
 }

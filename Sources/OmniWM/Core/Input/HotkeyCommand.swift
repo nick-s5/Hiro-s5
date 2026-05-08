@@ -32,6 +32,10 @@ enum HotkeyCommand: Codable, Equatable, Hashable {
     case moveWindowUp
     case moveWindowDownOrToWorkspaceDown
     case moveWindowUpOrToWorkspaceUp
+    case consumeOrExpelWindowLeft
+    case consumeOrExpelWindowRight
+    case consumeWindowIntoColumn
+    case expelWindowFromColumn
     case toggleColumnTabbed
 
     case focusDownOrLeft

@@ -230,6 +230,10 @@ public enum IPCCommandName: String, Codable, CaseIterable, Equatable, Sendable {
     case moveWindowUp = "move-window-up"
     case moveWindowDownOrToWorkspaceDown = "move-window-down-or-to-workspace-down"
     case moveWindowUpOrToWorkspaceUp = "move-window-up-or-to-workspace-up"
+    case consumeOrExpelWindowLeft = "consume-or-expel-window-left"
+    case consumeOrExpelWindowRight = "consume-or-expel-window-right"
+    case consumeWindowIntoColumn = "consume-window-into-column"
+    case expelWindowFromColumn = "expel-window-from-column"
     case switchWorkspace = "switch-workspace"
     case switchWorkspaceNext = "switch-workspace-next"
     case switchWorkspacePrevious = "switch-workspace-previous"
@@ -351,6 +355,10 @@ public enum IPCCommandRequest: Equatable, Sendable {
     case moveWindowUp
     case moveWindowDownOrToWorkspaceDown
     case moveWindowUpOrToWorkspaceUp
+    case consumeOrExpelWindowLeft
+    case consumeOrExpelWindowRight
+    case consumeWindowIntoColumn
+    case expelWindowFromColumn
     case switchWorkspace(workspaceNumber: Int)
     case switchWorkspaceNext
     case switchWorkspacePrevious
@@ -443,6 +451,14 @@ public enum IPCCommandRequest: Equatable, Sendable {
             .moveWindowDownOrToWorkspaceDown
         case .moveWindowUpOrToWorkspaceUp:
             .moveWindowUpOrToWorkspaceUp
+        case .consumeOrExpelWindowLeft:
+            .consumeOrExpelWindowLeft
+        case .consumeOrExpelWindowRight:
+            .consumeOrExpelWindowRight
+        case .consumeWindowIntoColumn:
+            .consumeWindowIntoColumn
+        case .expelWindowFromColumn:
+            .expelWindowFromColumn
         case .switchWorkspace:
             .switchWorkspace
         case .switchWorkspaceNext:
@@ -659,6 +675,18 @@ public enum IPCCommandRequest: Equatable, Sendable {
         case .moveWindowUpOrToWorkspaceUp:
             try requireNoArguments()
             self = .moveWindowUpOrToWorkspaceUp
+        case .consumeOrExpelWindowLeft:
+            try requireNoArguments()
+            self = .consumeOrExpelWindowLeft
+        case .consumeOrExpelWindowRight:
+            try requireNoArguments()
+            self = .consumeOrExpelWindowRight
+        case .consumeWindowIntoColumn:
+            try requireNoArguments()
+            self = .consumeWindowIntoColumn
+        case .expelWindowFromColumn:
+            try requireNoArguments()
+            self = .expelWindowFromColumn
         case .switchWorkspace:
             self = .switchWorkspace(workspaceNumber: try requireInteger())
         case .switchWorkspaceNext:
@@ -902,6 +930,14 @@ extension IPCCommandRequest: Codable {
             self = .moveWindowDownOrToWorkspaceDown
         case .moveWindowUpOrToWorkspaceUp:
             self = .moveWindowUpOrToWorkspaceUp
+        case .consumeOrExpelWindowLeft:
+            self = .consumeOrExpelWindowLeft
+        case .consumeOrExpelWindowRight:
+            self = .consumeOrExpelWindowRight
+        case .consumeWindowIntoColumn:
+            self = .consumeWindowIntoColumn
+        case .expelWindowFromColumn:
+            self = .expelWindowFromColumn
         case .switchWorkspace:
             let arguments = try container.decode(IPCWorkspaceNumberArguments.self, forKey: .arguments)
             self = .switchWorkspace(workspaceNumber: arguments.workspaceNumber)
@@ -1067,6 +1103,14 @@ extension IPCCommandRequest: Codable {
         case .moveWindowDownOrToWorkspaceDown:
             break
         case .moveWindowUpOrToWorkspaceUp:
+            break
+        case .consumeOrExpelWindowLeft:
+            break
+        case .consumeOrExpelWindowRight:
+            break
+        case .consumeWindowIntoColumn:
+            break
+        case .expelWindowFromColumn:
             break
         case let .switchWorkspace(workspaceNumber):
             try container.encode(IPCWorkspaceNumberArguments(workspaceNumber: workspaceNumber), forKey: .arguments)

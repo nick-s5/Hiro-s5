@@ -199,6 +199,10 @@ enum ActionCatalog {
             action(id: "moveWindowUp", command: .moveWindowUp, category: .move, binding: .unassigned),
             action(id: "moveWindowDownOrToWorkspaceDown", command: .moveWindowDownOrToWorkspaceDown, category: .move, binding: .unassigned),
             action(id: "moveWindowUpOrToWorkspaceUp", command: .moveWindowUpOrToWorkspaceUp, category: .move, binding: .unassigned),
+            action(id: "consumeOrExpelWindowLeft", command: .consumeOrExpelWindowLeft, category: .move, binding: .unassigned),
+            action(id: "consumeOrExpelWindowRight", command: .consumeOrExpelWindowRight, category: .move, binding: .unassigned),
+            action(id: "consumeWindowIntoColumn", command: .consumeWindowIntoColumn, category: .move, binding: .unassigned),
+            action(id: "expelWindowFromColumn", command: .expelWindowFromColumn, category: .move, binding: .unassigned),
         ])
 
         specs.append(contentsOf: [
@@ -335,6 +339,8 @@ enum ActionCatalog {
 
         case .moveWindowDown, .moveWindowUp,
              .moveWindowDownOrToWorkspaceDown, .moveWindowUpOrToWorkspaceUp,
+             .consumeOrExpelWindowLeft, .consumeOrExpelWindowRight,
+             .consumeWindowIntoColumn, .expelWindowFromColumn,
              .moveColumn, .moveColumnToFirst, .moveColumnToLast, .moveColumnToIndex,
              .moveColumnToWorkspace, .moveColumnToWorkspaceUp, .moveColumnToWorkspaceDown,
              .toggleColumnFullWidth, .toggleColumnTabbed,
@@ -394,6 +400,10 @@ enum ActionCatalog {
         case .moveWindowUp: "Move Window Up"
         case .moveWindowDownOrToWorkspaceDown: "Move Window Down or to Workspace Down"
         case .moveWindowUpOrToWorkspaceUp: "Move Window Up or to Workspace Up"
+        case .consumeOrExpelWindowLeft: "Consume or Expel Window Left"
+        case .consumeOrExpelWindowRight: "Consume or Expel Window Right"
+        case .consumeWindowIntoColumn: "Consume Window into Column"
+        case .expelWindowFromColumn: "Expel Window from Column"
         case .toggleColumnTabbed: "Toggle Column Tabbed"
         case .focusDownOrLeft: "Traverse Backward"
         case .focusUpOrRight: "Traverse Forward"
@@ -479,6 +489,14 @@ enum ActionCatalog {
             .moveWindowDownOrToWorkspaceDown
         case .moveWindowUpOrToWorkspaceUp:
             .moveWindowUpOrToWorkspaceUp
+        case .consumeOrExpelWindowLeft:
+            .consumeOrExpelWindowLeft
+        case .consumeOrExpelWindowRight:
+            .consumeOrExpelWindowRight
+        case .consumeWindowIntoColumn:
+            .consumeWindowIntoColumn
+        case .expelWindowFromColumn:
+            .expelWindowFromColumn
         case .switchWorkspace:
             .switchWorkspace
         case .switchWorkspaceNext:

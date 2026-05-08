@@ -4675,6 +4675,161 @@ private func makeCenteredCrossMonitorFixture(
         #expect(!consumedWindow.widthFixedByConstraint)
     }
 
+    @Test func consumeWindowIntoColumnPullsVisualTopFromRightWithoutChangingFocus() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 3)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let targetColumn = NiriContainer()
+        let sourceColumn = NiriContainer()
+        root.appendChild(targetColumn)
+        root.appendChild(sourceColumn)
+
+        let focusedWindow = NiriWindow(token: makeTestHandle(pid: 42).id)
+        let sourceBottomWindow = NiriWindow(token: makeTestHandle(pid: 43).id)
+        let sourceTopWindow = NiriWindow(token: makeTestHandle(pid: 44).id)
+        targetColumn.appendChild(focusedWindow)
+        sourceColumn.appendChild(sourceBottomWindow)
+        sourceColumn.appendChild(sourceTopWindow)
+        engine.tokenToNode[focusedWindow.token] = focusedWindow
+        engine.tokenToNode[sourceBottomWindow.token] = sourceBottomWindow
+        engine.tokenToNode[sourceTopWindow.token] = sourceTopWindow
+
+        var state = ViewportState()
+        state.selectedNodeId = focusedWindow.id
+
+        let consumed = engine.consumeWindowIntoColumn(
+            focusedColumn: targetColumn,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            gaps: 8
+        )
+
+        #expect(consumed)
+        #expect(engine.columns(in: wsId).count == 2)
+        #expect(targetColumn.windowNodes.map(\.id) == [sourceTopWindow.id, focusedWindow.id])
+        #expect(sourceColumn.windowNodes.map(\.id) == [sourceBottomWindow.id])
+        #expect(targetColumn.activeTileIdx == 1)
+        #expect(targetColumn.activeWindow?.id == focusedWindow.id)
+        #expect(state.selectedNodeId == focusedWindow.id)
+    }
+
+    @Test func consumeWindowIntoTabbedColumnPreservesFocusedActiveTab() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 3)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let targetColumn = NiriContainer()
+        targetColumn.displayMode = .tabbed
+        let sourceColumn = NiriContainer()
+        root.appendChild(targetColumn)
+        root.appendChild(sourceColumn)
+
+        let targetBottomWindow = NiriWindow(token: makeTestHandle(pid: 52).id)
+        let focusedWindow = NiriWindow(token: makeTestHandle(pid: 53).id)
+        let consumedWindow = NiriWindow(token: makeTestHandle(pid: 54).id)
+        targetColumn.appendChild(targetBottomWindow)
+        targetColumn.appendChild(focusedWindow)
+        sourceColumn.appendChild(consumedWindow)
+        targetColumn.setActiveTileIdx(1)
+        engine.updateTabbedColumnVisibility(column: targetColumn)
+        engine.tokenToNode[targetBottomWindow.token] = targetBottomWindow
+        engine.tokenToNode[focusedWindow.token] = focusedWindow
+        engine.tokenToNode[consumedWindow.token] = consumedWindow
+
+        var state = ViewportState()
+        state.selectedNodeId = focusedWindow.id
+
+        let consumed = engine.consumeWindowIntoColumn(
+            focusedColumn: targetColumn,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            gaps: 8
+        )
+
+        #expect(consumed)
+        #expect(engine.columns(in: wsId).count == 1)
+        #expect(targetColumn.windowNodes.map(\.id) == [consumedWindow.id, targetBottomWindow.id, focusedWindow.id])
+        #expect(targetColumn.activeTileIdx == 2)
+        #expect(targetColumn.activeWindow?.id == focusedWindow.id)
+        #expect(state.selectedNodeId == focusedWindow.id)
+        #expect(consumedWindow.isHiddenInTabbedMode)
+        #expect(targetBottomWindow.isHiddenInTabbedMode)
+        #expect(!focusedWindow.isHiddenInTabbedMode)
+    }
+
+    @Test func consumeOrExpelWindowCanDisableEdgeWrapForNiriCommand() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 3, infiniteLoop: true)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let leftColumn = NiriContainer()
+        let rightColumn = NiriContainer()
+        root.appendChild(leftColumn)
+        root.appendChild(rightColumn)
+
+        let leftWindow = NiriWindow(token: makeTestHandle(pid: 48).id)
+        let rightWindow = NiriWindow(token: makeTestHandle(pid: 49).id)
+        leftColumn.appendChild(leftWindow)
+        rightColumn.appendChild(rightWindow)
+        engine.tokenToNode[leftWindow.token] = leftWindow
+        engine.tokenToNode[rightWindow.token] = rightWindow
+
+        var state = ViewportState()
+        let moved = engine.consumeOrExpelWindow(
+            leftWindow,
+            direction: .left,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            workingFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            gaps: 8,
+            allowEdgeWrap: false
+        )
+
+        #expect(!moved)
+        #expect(engine.columns(in: wsId).count == 2)
+        #expect(leftColumn.windowNodes.map(\.id) == [leftWindow.id])
+        #expect(rightColumn.windowNodes.map(\.id) == [rightWindow.id])
+    }
+
+    @Test func consumeWindowIntoColumnRespectsMaxWindowsPerColumn() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 1)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let targetColumn = NiriContainer()
+        let sourceColumn = NiriContainer()
+        root.appendChild(targetColumn)
+        root.appendChild(sourceColumn)
+
+        let focusedWindow = NiriWindow(token: makeTestHandle(pid: 50).id)
+        let sourceWindow = NiriWindow(token: makeTestHandle(pid: 51).id)
+        targetColumn.appendChild(focusedWindow)
+        sourceColumn.appendChild(sourceWindow)
+        engine.tokenToNode[focusedWindow.token] = focusedWindow
+        engine.tokenToNode[sourceWindow.token] = sourceWindow
+
+        var state = ViewportState()
+        let consumed = engine.consumeWindowIntoColumn(
+            focusedColumn: targetColumn,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            gaps: 8
+        )
+
+        #expect(!consumed)
+        #expect(targetColumn.windowNodes.map(\.id) == [focusedWindow.id])
+        #expect(sourceColumn.windowNodes.map(\.id) == [sourceWindow.id])
+    }
+
     @Test func expelWindowResetsMovedWindowSizing() {
         let engine = NiriLayoutEngine(maxWindowsPerColumn: 3)
         let wsId = UUID()
@@ -4716,6 +4871,89 @@ private func makeCenteredCrossMonitorFixture(
         #expect(expelledWindow.resolvedWidth == nil)
         #expect(!expelledWindow.heightFixedByConstraint)
         #expect(!expelledWindow.widthFixedByConstraint)
+    }
+
+    @Test func expelWindowFromColumnMovesVisualBottomRightWithoutFollowingIt() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 3)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let sourceColumn = NiriContainer()
+        root.appendChild(sourceColumn)
+
+        let bottomWindow = NiriWindow(token: makeTestHandle(pid: 45).id)
+        let nextWindow = NiriWindow(token: makeTestHandle(pid: 46).id)
+        let topWindow = NiriWindow(token: makeTestHandle(pid: 47).id)
+        sourceColumn.appendChild(bottomWindow)
+        sourceColumn.appendChild(nextWindow)
+        sourceColumn.appendChild(topWindow)
+        engine.tokenToNode[bottomWindow.token] = bottomWindow
+        engine.tokenToNode[nextWindow.token] = nextWindow
+        engine.tokenToNode[topWindow.token] = topWindow
+
+        var state = ViewportState()
+        state.selectedNodeId = bottomWindow.id
+
+        let expelled = engine.expelWindowFromColumn(
+            focusedColumn: sourceColumn,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            workingFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            gaps: 8
+        )
+
+        let columns = engine.columns(in: wsId)
+        #expect(expelled)
+        #expect(columns.count == 2)
+        #expect(columns[0] === sourceColumn)
+        #expect(columns[1].windowNodes.map(\.id) == [bottomWindow.id])
+        #expect(sourceColumn.windowNodes.map(\.id) == [nextWindow.id, topWindow.id])
+        #expect(state.selectedNodeId == nextWindow.id)
+    }
+
+    @Test func expelWindowFromColumnPreservesNonBottomFocusedActiveTile() {
+        let engine = NiriLayoutEngine(maxWindowsPerColumn: 3)
+        let wsId = UUID()
+        let root = NiriRoot(workspaceId: wsId)
+        engine.roots[wsId] = root
+
+        let sourceColumn = NiriContainer()
+        root.appendChild(sourceColumn)
+
+        let bottomWindow = NiriWindow(token: makeTestHandle(pid: 55).id)
+        let focusedWindow = NiriWindow(token: makeTestHandle(pid: 56).id)
+        let topWindow = NiriWindow(token: makeTestHandle(pid: 57).id)
+        sourceColumn.appendChild(bottomWindow)
+        sourceColumn.appendChild(focusedWindow)
+        sourceColumn.appendChild(topWindow)
+        sourceColumn.setActiveTileIdx(1)
+        engine.tokenToNode[bottomWindow.token] = bottomWindow
+        engine.tokenToNode[focusedWindow.token] = focusedWindow
+        engine.tokenToNode[topWindow.token] = topWindow
+
+        var state = ViewportState()
+        state.selectedNodeId = focusedWindow.id
+
+        let expelled = engine.expelWindowFromColumn(
+            focusedColumn: sourceColumn,
+            in: wsId,
+            motion: .enabled,
+            state: &state,
+            workingFrame: CGRect(x: 0, y: 0, width: 1200, height: 900),
+            gaps: 8
+        )
+
+        let columns = engine.columns(in: wsId)
+        #expect(expelled)
+        #expect(columns.count == 2)
+        #expect(columns[0] === sourceColumn)
+        #expect(columns[1].windowNodes.map(\.id) == [bottomWindow.id])
+        #expect(sourceColumn.windowNodes.map(\.id) == [focusedWindow.id, topWindow.id])
+        #expect(sourceColumn.activeTileIdx == 0)
+        #expect(sourceColumn.activeWindow?.id == focusedWindow.id)
+        #expect(state.selectedNodeId == focusedWindow.id)
     }
 
     @Test func insertWindowInNewColumnUsesExplicitDefaultWidth() {

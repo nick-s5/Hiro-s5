@@ -641,7 +641,6 @@ class NiriContainer: NiriNode {
     }
 
     func adjustActiveTileIdxForRemoval(of node: NiriNode) {
-        guard isTabbed else { return }
         let windows = windowNodes
         guard let idx = windows.firstIndex(where: { $0 === node }) else { return }
         if idx == activeTileIdx {

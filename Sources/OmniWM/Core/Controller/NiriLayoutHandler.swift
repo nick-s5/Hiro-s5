@@ -1489,6 +1489,62 @@ enum NiriWindowMoveResult {
         controller?.workspaceNavigationHandler.moveWindowToAdjacentWorkspace(direction: direction)
     }
 
+    func consumeOrExpelWindow(direction: Direction) {
+        guard direction == .left || direction == .right else { return }
+        withNiriOperationContext { ctx, state in
+            guard ctx.engine.consumeOrExpelWindow(
+                ctx.windowNode,
+                direction: direction,
+                in: ctx.wsId,
+                motion: ctx.motion,
+                state: &state,
+                workingFrame: ctx.workingFrame,
+                gaps: ctx.gaps,
+                allowEdgeWrap: false
+            ) else {
+                return false
+            }
+            return ctx.commitSimple(state: state)
+        }
+    }
+
+    func consumeWindowIntoColumn() {
+        withNiriOperationContext { ctx, state in
+            guard let column = ctx.engine.findColumn(containing: ctx.windowNode, in: ctx.wsId) else {
+                return false
+            }
+            guard ctx.engine.consumeWindowIntoColumn(
+                focusedColumn: column,
+                in: ctx.wsId,
+                motion: ctx.motion,
+                state: &state,
+                gaps: ctx.gaps
+            ) else {
+                return false
+            }
+            return ctx.commitSimple(state: state)
+        }
+    }
+
+    func expelWindowFromColumn() {
+        withNiriOperationContext { ctx, state in
+            guard let column = ctx.engine.findColumn(containing: ctx.windowNode, in: ctx.wsId) else {
+                return false
+            }
+            guard ctx.engine.expelWindowFromColumn(
+                focusedColumn: column,
+                in: ctx.wsId,
+                motion: ctx.motion,
+                state: &state,
+                workingFrame: ctx.workingFrame,
+                gaps: ctx.gaps
+            ) else {
+                return false
+            }
+            return ctx.commitSimple(state: state)
+        }
+    }
+
     private func windowMoveEdgeResult(for node: NiriWindow, direction: Direction) -> NiriWindowMoveResult {
         guard node.parent is NiriContainer else {
             return .blocked

@@ -55,10 +55,11 @@ extension NiriLayoutEngine {
         to targetColumn: NiriContainer,
         in workspaceId: WorkspaceDescriptor.ID,
         targetInsertionPolicy: TargetColumnInsertionPolicy = .append,
-        activateInsertedWindowInTabbedTarget: Bool = false
+        activateInsertedWindowInTarget: Bool = false
     ) -> ColumnTransferResult {
         let sourceColumnIndexBeforeCleanup = columnIndex(of: sourceColumn, in: workspaceId) ?? 0
         let sourceWasTabbed = sourceColumn.displayMode == .tabbed
+        let targetActiveTileIdxBeforeInsert = targetColumn.activeTileIdx
         sourceColumn.adjustActiveTileIdxForRemoval(of: node)
 
         node.detach()
@@ -73,10 +74,13 @@ extension NiriLayoutEngine {
             updateTabbedColumnVisibility(column: sourceColumn)
         }
 
+        if activateInsertedWindowInTarget {
+            targetColumn.setActiveTileIdx(insertedIndex)
+        } else if insertedIndex <= targetActiveTileIdxBeforeInsert {
+            targetColumn.setActiveTileIdx(targetActiveTileIdxBeforeInsert + 1)
+        }
+
         if targetColumn.displayMode == .tabbed {
-            if activateInsertedWindowInTabbedTarget {
-                targetColumn.setActiveTileIdx(insertedIndex)
-            }
             updateTabbedColumnVisibility(column: targetColumn)
         } else {
             node.isHiddenInTabbedMode = false
@@ -466,7 +470,8 @@ extension NiriLayoutEngine {
         motion: MotionSnapshot,
         state: inout ViewportState,
         workingFrame: CGRect,
-        gaps: CGFloat
+        gaps: CGFloat,
+        allowEdgeWrap: Bool = true
     ) -> Bool {
         guard direction == .left || direction == .right else { return false }
 
@@ -490,7 +495,19 @@ extension NiriLayoutEngine {
 
         let cols = columns(in: workspaceId)
         let step = (direction == .right) ? 1 : -1
-        guard let neighborIdx = wrapIndex(currentIdx + step, total: cols.count, in: workspaceId) else { return false }
+        let neighborIdx: Int
+        if allowEdgeWrap {
+            guard let wrappedIdx = wrapIndex(currentIdx + step, total: cols.count, in: workspaceId) else {
+                return false
+            }
+            neighborIdx = wrappedIdx
+        } else {
+            let adjacentIdx = currentIdx + step
+            guard adjacentIdx >= 0, adjacentIdx < cols.count else {
+                return false
+            }
+            neighborIdx = adjacentIdx
+        }
 
         if neighborIdx == currentIdx { return false }
 
@@ -516,7 +533,7 @@ extension NiriLayoutEngine {
             to: neighborColumn,
             in: workspaceId,
             targetInsertionPolicy: .visualBottom,
-            activateInsertedWindowInTabbedTarget: neighborColumn.displayMode == .tabbed
+            activateInsertedWindowInTarget: true
         )
 
         state.selectedNodeId = window.id
@@ -566,6 +583,156 @@ extension NiriLayoutEngine {
             fromContainerIndex: previousActiveColumnIndex,
             previousActiveContainerPosition: previousActiveColumnPosition
         )
+
+        return true
+    }
+
+    func consumeWindowIntoColumn(
+        focusedColumn targetColumn: NiriContainer,
+        in workspaceId: WorkspaceDescriptor.ID,
+        motion: MotionSnapshot,
+        state: inout ViewportState,
+        gaps: CGFloat
+    ) -> Bool {
+        let cols = columns(in: workspaceId)
+        guard let targetColumnIdx = columnIndex(of: targetColumn, in: workspaceId),
+              targetColumnIdx + 1 < cols.count
+        else {
+            return false
+        }
+        guard targetColumn.children.count < effectiveMaxWindowsPerColumn(in: workspaceId) else {
+            return false
+        }
+
+        let sourceColumnIdx = targetColumnIdx + 1
+        let sourceColumn = cols[sourceColumnIdx]
+        guard let window = sourceColumn.windowNodes.last,
+              let sourceTileIdx = sourceColumn.windowNodes.firstIndex(where: { $0 === window })
+        else {
+            return false
+        }
+
+        let now = animationClock?.now() ?? CACurrentMediaTime()
+        let sourceColX = state.columnX(at: sourceColumnIdx, columns: cols, gap: gaps)
+        let sourceColRenderOffset = sourceColumn.renderOffset(at: now)
+        let sourceTileOffset = computeTileOffset(column: sourceColumn, tileIdx: sourceTileIdx, gaps: gaps)
+
+        let transfer = moveWindowToColumn(
+            window,
+            from: sourceColumn,
+            to: targetColumn,
+            in: workspaceId,
+            targetInsertionPolicy: .visualBottom
+        )
+
+        if transfer.sourceBecameEmpty {
+            _ = animateColumnsForRemoval(
+                columnIndex: transfer.sourceColumnIndexBeforeCleanup,
+                in: workspaceId,
+                motion: motion,
+                state: &state,
+                gaps: gaps
+            )
+            cleanupEmptyColumn(sourceColumn, in: workspaceId, state: &state)
+        }
+
+        let newCols = columns(in: workspaceId)
+        let targetColIdx = columnIndex(of: targetColumn, in: workspaceId) ?? targetColumnIdx
+        let targetColX = state.columnX(at: targetColIdx, columns: newCols, gap: gaps)
+        let targetColRenderOffset = targetColumn.renderOffset(at: now)
+        let targetTileOffset = computeTileOffset(
+            column: targetColumn,
+            tileIdx: transfer.insertedTileIndex,
+            gaps: gaps
+        )
+
+        let displacement = CGPoint(
+            x: sourceColX + sourceColRenderOffset.x - (targetColX + targetColRenderOffset.x),
+            y: sourceTileOffset - targetTileOffset
+        )
+        if displacement.x != 0 || displacement.y != 0 {
+            window.animateMoveFrom(
+                displacement: displacement,
+                clock: animationClock,
+                config: windowMovementAnimationConfig,
+                displayRefreshRate: displayRefreshRate,
+                animated: motion.animationsEnabled
+            )
+        }
+
+        return true
+    }
+
+    func expelWindowFromColumn(
+        focusedColumn sourceColumn: NiriContainer,
+        in workspaceId: WorkspaceDescriptor.ID,
+        motion: MotionSnapshot,
+        state: inout ViewportState,
+        workingFrame: CGRect,
+        gaps: CGFloat
+    ) -> Bool {
+        guard sourceColumn.windowNodes.count > 1,
+              let root = roots[workspaceId],
+              let sourceColumnIdx = columnIndex(of: sourceColumn, in: workspaceId),
+              let window = sourceColumn.windowNodes.first
+        else {
+            return false
+        }
+
+        let now = animationClock?.now() ?? CACurrentMediaTime()
+        let cols = columns(in: workspaceId)
+        let sourceTileIdx = sourceColumn.windowNodes.firstIndex(where: { $0 === window }) ?? 0
+        let sourceColX = state.columnX(at: sourceColumnIdx, columns: cols, gap: gaps)
+        let sourceColRenderOffset = sourceColumn.renderOffset(at: now)
+        let sourceTileOffset = computeTileOffset(column: sourceColumn, tileIdx: sourceTileIdx, gaps: gaps)
+        let replacementSelectionId = sourceColumn.windowNodes.dropFirst().first?.id
+        let selectedExpelledWindow = state.selectedNodeId == window.id
+
+        let newColumn = NiriContainer()
+        copyColumnWidthState(from: sourceColumn, to: newColumn)
+        root.insertAfter(newColumn, reference: sourceColumn)
+
+        _ = moveWindowToColumn(
+            window,
+            from: sourceColumn,
+            to: newColumn,
+            in: workspaceId
+        )
+
+        if let newColIdx = columnIndex(of: newColumn, in: workspaceId) {
+            animateColumnsForAddition(
+                columnIndex: newColIdx,
+                in: workspaceId,
+                motion: motion,
+                state: state,
+                gaps: gaps,
+                workingAreaWidth: workingFrame.width
+            )
+        }
+
+        let newCols = columns(in: workspaceId)
+        if let newColIdx = columnIndex(of: newColumn, in: workspaceId) {
+            let targetColX = state.columnX(at: newColIdx, columns: newCols, gap: gaps)
+            let targetColRenderOffset = newColumn.renderOffset(at: now)
+            let displacement = CGPoint(
+                x: sourceColX + sourceColRenderOffset.x - (targetColX + targetColRenderOffset.x),
+                y: sourceTileOffset
+            )
+
+            if displacement.x != 0 || displacement.y != 0 {
+                window.animateMoveFrom(
+                    displacement: displacement,
+                    clock: animationClock,
+                    config: windowMovementAnimationConfig,
+                    displayRefreshRate: displayRefreshRate,
+                    animated: motion.animationsEnabled
+                )
+            }
+        }
+
+        if selectedExpelledWindow {
+            state.selectedNodeId = replacementSelectionId
+        }
 
         return true
     }

@@ -53,6 +53,14 @@ final class IPCCommandRouter {
             return controller.commandHandler.performCommand(.moveWindowDownOrToWorkspaceDown)
         case .moveWindowUpOrToWorkspaceUp:
             return controller.commandHandler.performCommand(.moveWindowUpOrToWorkspaceUp)
+        case .consumeOrExpelWindowLeft:
+            return controller.commandHandler.performCommand(.consumeOrExpelWindowLeft)
+        case .consumeOrExpelWindowRight:
+            return controller.commandHandler.performCommand(.consumeOrExpelWindowRight)
+        case .consumeWindowIntoColumn:
+            return controller.commandHandler.performCommand(.consumeWindowIntoColumn)
+        case .expelWindowFromColumn:
+            return controller.commandHandler.performCommand(.expelWindowFromColumn)
         case let .switchWorkspace(workspaceNumber):
             guard let target = workspaceTarget(from: workspaceNumber) else {
                 return .invalidArguments

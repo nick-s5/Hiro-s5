@@ -72,11 +72,19 @@ import OmniWMIPC
         let up = try CLIParser.parse(arguments: ["omniwmctl", "command", "move-window-up"])
         let downFallback = try CLIParser.parse(arguments: ["omniwmctl", "command", "move-window-down-or-to-workspace-down"])
         let upFallback = try CLIParser.parse(arguments: ["omniwmctl", "command", "move-window-up-or-to-workspace-up"])
+        let consumeLeft = try CLIParser.parse(arguments: ["omniwmctl", "command", "consume-or-expel-window-left"])
+        let consumeRight = try CLIParser.parse(arguments: ["omniwmctl", "command", "consume-or-expel-window-right"])
+        let consumeInto = try CLIParser.parse(arguments: ["omniwmctl", "command", "consume-window-into-column"])
+        let expelFrom = try CLIParser.parse(arguments: ["omniwmctl", "command", "expel-window-from-column"])
 
         guard case let .command(downCommand) = down.request.payload,
               case let .command(upCommand) = up.request.payload,
               case let .command(downFallbackCommand) = downFallback.request.payload,
-              case let .command(upFallbackCommand) = upFallback.request.payload
+              case let .command(upFallbackCommand) = upFallback.request.payload,
+              case let .command(consumeLeftCommand) = consumeLeft.request.payload,
+              case let .command(consumeRightCommand) = consumeRight.request.payload,
+              case let .command(consumeIntoCommand) = consumeInto.request.payload,
+              case let .command(expelFromCommand) = expelFrom.request.payload
         else {
             Issue.record("Expected command payloads")
             return
@@ -86,6 +94,10 @@ import OmniWMIPC
         #expect(upCommand == .moveWindowUp)
         #expect(downFallbackCommand == .moveWindowDownOrToWorkspaceDown)
         #expect(upFallbackCommand == .moveWindowUpOrToWorkspaceUp)
+        #expect(consumeLeftCommand == .consumeOrExpelWindowLeft)
+        #expect(consumeRightCommand == .consumeOrExpelWindowRight)
+        #expect(consumeIntoCommand == .consumeWindowIntoColumn)
+        #expect(expelFromCommand == .expelWindowFromColumn)
     }
 
     @Test func parsesResizeCommand() throws {
