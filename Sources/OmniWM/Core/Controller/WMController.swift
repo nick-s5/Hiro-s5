@@ -1244,6 +1244,14 @@ final class WMController {
         _ entry: WindowModel.Entry,
         monitor: Monitor
     ) {
+        // Hold an AX reference before hiding so reveal can still resolve windows
+        // whose apps drop them from kAXWindowsAttribute while off-screen
+        // (Calculator, some AppKit panels). axWindowRef enumeration would
+        // otherwise return nil and the reveal frame write would silently skip.
+        if let ref = AXWindowService.axWindowRef(for: UInt32(entry.windowId), pid: entry.pid) {
+            AXWindowService.pinAXElement(ref.element, for: UInt32(entry.windowId))
+        }
+
         let preferredSide = layoutRefreshController.preferredHideSide(for: monitor)
         layoutRefreshController.hideWindow(
             entry,
@@ -1750,6 +1758,7 @@ final class WMController {
         if workspaceManager.isScratchpadToken(token) {
             guard !workspaceManager.isHiddenInCorner(token) else { return }
             _ = workspaceManager.clearScratchpadIfMatches(token)
+            AXWindowService.unpinAXElement(for: UInt32(token.windowId))
             applyManagedWindowOverride(.forceTile, for: token, entry: entry)
             return
         }
@@ -1757,6 +1766,7 @@ final class WMController {
         if let existingScratchpadToken = workspaceManager.scratchpadToken() {
             if workspaceManager.entry(for: existingScratchpadToken) == nil {
                 _ = workspaceManager.clearScratchpadIfMatches(existingScratchpadToken)
+                AXWindowService.unpinAXElement(for: UInt32(existingScratchpadToken.windowId))
             } else {
                 return
             }
@@ -1821,6 +1831,7 @@ final class WMController {
         guard let scratchpadToken = workspaceManager.scratchpadToken() else { return }
         guard let entry = workspaceManager.entry(for: scratchpadToken) else {
             _ = workspaceManager.clearScratchpadIfMatches(scratchpadToken)
+            AXWindowService.unpinAXElement(for: UInt32(scratchpadToken.windowId))
             return
         }
         guard !isManagedWindowSuspendedForNativeFullscreen(scratchpadToken) else { return }

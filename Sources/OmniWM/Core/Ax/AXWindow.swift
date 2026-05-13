@@ -184,6 +184,31 @@ enum AXWindowService {
     @MainActor static var titleLookupProviderForTests: ((UInt32) -> String?)?
     @MainActor static var timeSourceForTests: (() -> TimeInterval)?
 
+    // Held AXUIElement references for windows that may be pruned from the
+    // app's kAXWindowsAttribute enumeration (e.g. scratchpad-hidden Calculator
+    // windows that drop out of the AX windows list while off-screen). Survives
+    // AppAXContext reconciliation because we hold the CFType ref directly.
+    private static let pinnedElementsLock = NSLock()
+    nonisolated(unsafe) private static var pinnedElements: [UInt32: AXUIElement] = [:]
+
+    static func pinAXElement(_ element: AXUIElement, for windowId: UInt32) {
+        pinnedElementsLock.lock()
+        defer { pinnedElementsLock.unlock() }
+        pinnedElements[windowId] = element
+    }
+
+    static func unpinAXElement(for windowId: UInt32) {
+        pinnedElementsLock.lock()
+        defer { pinnedElementsLock.unlock() }
+        pinnedElements.removeValue(forKey: windowId)
+    }
+
+    private static func pinnedAXElement(for windowId: UInt32) -> AXUIElement? {
+        pinnedElementsLock.lock()
+        defer { pinnedElementsLock.unlock() }
+        return pinnedElements[windowId]
+    }
+
     private struct CachedTitle {
         let title: String?
         let fetchedAt: TimeInterval
@@ -687,6 +712,15 @@ enum AXWindowService {
         if let axWindowRefProviderForTests {
             return axWindowRefProviderForTests(windowId, pid)
         }
+
+        if let pinned = pinnedAXElement(for: windowId) {
+            var winId: CGWindowID = 0
+            if _AXUIElementGetWindow(pinned, &winId) == .success, winId == windowId {
+                return AXWindowRef(element: pinned, windowId: Int(winId))
+            }
+            unpinAXElement(for: windowId)
+        }
+
         let appElement = AXUIElementCreateApplication(pid)
         var windowsRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(
