@@ -229,6 +229,27 @@ final class QuakeTerminalController: NSObject, NSWindowDelegate, QuakeTerminalTa
         ghostty_config_free(newConfig)
     }
 
+    func applyGeometryToVisibleWindow() {
+        guard let window, visible else { return }
+
+        if settings.quakeTerminalUseCustomFrame,
+           let customFrame = settings.quakeTerminalCustomFrame,
+           let screen = window.screen ?? NSScreen.main,
+           screen.visibleFrame.intersects(customFrame)
+        {
+            window.setFrame(customFrame, display: true)
+            return
+        }
+
+        let screen = targetScreen()
+        settings.quakeTerminalPosition.setFinal(
+            in: window,
+            on: screen,
+            widthPercent: settings.quakeTerminalWidthPercent,
+            heightPercent: settings.quakeTerminalHeightPercent
+        )
+    }
+
     private func tick() {
         guard let ghosttyApp else { return }
         ghostty_app_tick(ghosttyApp)

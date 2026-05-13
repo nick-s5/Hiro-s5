@@ -263,6 +263,15 @@ final class WMController {
         setPreventSleepEnabled(settings.preventSleepEnabled)
         setQuakeTerminalEnabled(settings.quakeTerminalEnabled)
 
+        // External edits to settings.toml otherwise stop here at refreshStatusBar
+        // and skip subsystems that read settings only at trigger time. Push the
+        // remaining live values explicitly so editor saves take effect without
+        // an app relaunch.
+        quakeTerminalController.applyGeometryToVisibleWindow()
+        quakeTerminalController.reloadOpacityConfig()
+        updateWorkspaceBarSettings()
+        _ = syncMouseWarpPolicy()
+
         setEnabled(true)
         refreshStatusBar()
     }
