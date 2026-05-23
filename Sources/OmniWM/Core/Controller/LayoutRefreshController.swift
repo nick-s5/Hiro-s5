@@ -1110,6 +1110,7 @@ import QuartzCore
     private func buildFullRefreshExecutionPlan() async throws -> RefreshExecutionPlan {
         guard let controller else { return .init() }
 
+        let hadNativeFullscreenLifecycleContextAtStart = controller.workspaceManager.hasNativeFullscreenLifecycleContext
         let enumerationSnapshot = await controller.axManager.fullRescanEnumerationSnapshot()
         let windows = enumerationSnapshot.windows
         try Task.checkCancellation()
@@ -1340,7 +1341,8 @@ import QuartzCore
         }
 
         let shouldPreserveMissingWindows = shouldPreserveMissingWindowsDuringNativeFullscreen(
-            controller: controller
+            controller: controller,
+            hadLifecycleContextAtStart: hadNativeFullscreenLifecycleContextAtStart
         )
         let trackedEntries = controller.workspaceManager.allEntries()
         if shouldPreserveMissingWindows {
@@ -1384,7 +1386,9 @@ import QuartzCore
         {
             controller.cleanupScratchpadWindowResources(for: scratchpadTokenBeforeRemove)
         }
-        controller.workspaceManager.garbageCollectUnusedWorkspaces(focusedWorkspaceId: focusedWorkspaceId)
+        if !shouldPreserveMissingWindows {
+            controller.workspaceManager.garbageCollectUnusedWorkspaces(focusedWorkspaceId: focusedWorkspaceId)
+        }
 
         try Task.checkCancellation()
 
@@ -1432,9 +1436,10 @@ import QuartzCore
     }
 
     private func shouldPreserveMissingWindowsDuringNativeFullscreen(
-        controller: WMController
+        controller: WMController,
+        hadLifecycleContextAtStart: Bool
     ) -> Bool {
-        controller.workspaceManager.hasNativeFullscreenLifecycleContext
+        hadLifecycleContextAtStart || controller.workspaceManager.hasNativeFullscreenLifecycleContext
     }
 
     private enum ScratchpadRescanEvidence {

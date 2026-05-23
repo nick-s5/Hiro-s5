@@ -2684,6 +2684,112 @@ private func syncNiriWorkspaceStatesForRefreshTests(
         #expect(workspaceBarWindowCount(controller: controller, workspaceId: workspaceId) == 5)
     }
 
+    @Test @MainActor func nativeFullscreenExitPreservesInactiveWorkspaceWindowsDuringPartialEnumeration() async {
+        let controller = makeRefreshTestController()
+        defer { cleanupRefreshTestController(controller) }
+        controller.motionPolicy.animationsEnabled = false
+
+        guard let workspaceOne = controller.activeWorkspace()?.id,
+              let workspaceTwo = controller.workspaceManager.workspaceId(for: "2", createIfMissing: true)
+        else {
+            Issue.record("Missing workspaces for native fullscreen partial enumeration")
+            return
+        }
+
+        let visibleWindows = VisibleWindowsStore([
+            (makeRefreshTestWindow(windowId: 2741), getpid(), 2741),
+            (makeRefreshTestWindow(windowId: 2742), getpid(), 2742)
+        ])
+        var fullscreenWindowIds: Set<Int> = []
+        controller.axManager.currentWindowsAsyncOverride = { visibleWindows.value }
+        controller.axEventHandler.isFullscreenProvider = { axRef in
+            fullscreenWindowIds.contains(axRef.windowId)
+        }
+
+        _ = await prepareNiriState(
+            on: controller,
+            assignments: [
+                (workspaceOne, 2741),
+                (workspaceTwo, 2742)
+            ],
+            focusedWindowId: 2741,
+            ensureWorkspaces: [workspaceTwo]
+        )
+
+        let targetToken = WindowToken(pid: getpid(), windowId: 2741)
+        let inactiveToken = WindowToken(pid: getpid(), windowId: 2742)
+        let originalEntryCount = controller.workspaceManager.allEntries().count
+
+        _ = controller.workspaceManager.requestNativeFullscreenEnter(targetToken, in: workspaceOne)
+        _ = controller.workspaceManager.markNativeFullscreenSuspended(targetToken)
+
+        fullscreenWindowIds.removeAll()
+        visibleWindows.value = [
+            (makeRefreshTestWindow(windowId: 2741), getpid(), 2741)
+        ]
+        controller.layoutRefreshController.requestFullRescan(reason: .activeSpaceChanged)
+        await waitForSettledRefreshWork(on: controller)
+
+        #expect(controller.workspaceManager.nativeFullscreenRecord(for: targetToken) == nil)
+        #expect(controller.workspaceManager.layoutReason(for: targetToken) == .standard)
+        #expect(controller.workspaceManager.entry(for: inactiveToken)?.workspaceId == workspaceTwo)
+        #expect(controller.workspaceManager.allEntries().count == originalEntryCount)
+        #expect(controller.workspaceManager.entry(for: targetToken) != nil)
+    }
+
+    @Test @MainActor func nativeFullscreenExitPreservesInactiveWorkspaceWindowsWhenLifecycleClearsDuringEnumeration() async {
+        let controller = makeRefreshTestController()
+        defer { cleanupRefreshTestController(controller) }
+        controller.motionPolicy.animationsEnabled = false
+
+        guard let workspaceOne = controller.activeWorkspace()?.id,
+              let workspaceTwo = controller.workspaceManager.workspaceId(for: "2", createIfMissing: true)
+        else {
+            Issue.record("Missing workspaces for native fullscreen enumeration race")
+            return
+        }
+
+        _ = await prepareNiriState(
+            on: controller,
+            assignments: [
+                (workspaceOne, 2743),
+                (workspaceTwo, 2744)
+            ],
+            focusedWindowId: 2743,
+            ensureWorkspaces: [workspaceTwo]
+        )
+
+        let targetToken = WindowToken(pid: getpid(), windowId: 2743)
+        let inactiveToken = WindowToken(pid: getpid(), windowId: 2744)
+        let originalEntryCount = controller.workspaceManager.allEntries().count
+
+        _ = controller.workspaceManager.requestNativeFullscreenEnter(targetToken, in: workspaceOne)
+        _ = controller.workspaceManager.markNativeFullscreenSuspended(targetToken)
+        #expect(controller.workspaceManager.hasNativeFullscreenLifecycleContext)
+
+        var restoredDuringEnumeration = false
+        controller.axEventHandler.isFullscreenProvider = { _ in false }
+        controller.axManager.fullRescanEnumerationOverrideForTests = {
+            await Task.yield()
+            _ = controller.workspaceManager.restoreNativeFullscreenRecord(for: targetToken)
+            restoredDuringEnumeration = !controller.workspaceManager.hasNativeFullscreenLifecycleContext
+            return AXManager.FullRescanEnumerationSnapshot(
+                windows: [(makeRefreshTestWindow(windowId: 2743), getpid(), 2743)],
+                failedPIDs: []
+            )
+        }
+
+        controller.layoutRefreshController.requestFullRescan(reason: .activeSpaceChanged)
+        await waitForSettledRefreshWork(on: controller)
+
+        #expect(restoredDuringEnumeration)
+        #expect(controller.workspaceManager.nativeFullscreenRecord(for: targetToken) == nil)
+        #expect(controller.workspaceManager.layoutReason(for: targetToken) == .standard)
+        #expect(controller.workspaceManager.entry(for: inactiveToken)?.workspaceId == workspaceTwo)
+        #expect(controller.workspaceManager.allEntries().count == originalEntryCount)
+        #expect(controller.workspaceManager.entry(for: targetToken) != nil)
+    }
+
     @Test @MainActor func nativeFullscreenReplacementSpaceChangePreservesMultiColumnNiriOrder() async {
         let controller = makeRefreshTestController()
         defer { cleanupRefreshTestController(controller) }
