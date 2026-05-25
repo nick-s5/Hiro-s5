@@ -443,6 +443,26 @@ final class DwindleLayoutEngine {
         }
     }
 
+    func presentedFrames(in workspaceId: WorkspaceDescriptor.ID, at time: TimeInterval) -> [WindowToken: CGRect] {
+        guard let root = roots[workspaceId] else { return [:] }
+        var frames: [WindowToken: CGRect] = [:]
+        collectPresentedFrames(node: root, at: time, into: &frames)
+        return frames
+    }
+
+    private func collectPresentedFrames(
+        node: DwindleNode,
+        at time: TimeInterval,
+        into frames: inout [WindowToken: CGRect]
+    ) {
+        if case let .leaf(handle, _) = node.kind, let handle, let frame = node.presentedFrame(at: time) {
+            frames[handle] = frame
+        }
+        for child in node.children {
+            collectPresentedFrames(node: child, at: time, into: &frames)
+        }
+    }
+
     func hitTestFocusableWindow(
         point: CGPoint,
         in workspaceId: WorkspaceDescriptor.ID,
@@ -495,16 +515,7 @@ final class DwindleLayoutEngine {
     }
 
     private func presentedFrame(for node: DwindleNode, at time: TimeInterval) -> CGRect? {
-        guard let frame = node.cachedFrame else { return nil }
-
-        let offset = node.renderOffset(at: time)
-        let sizeOffset = node.renderSizeOffset(at: time)
-        return CGRect(
-            x: frame.origin.x + offset.x,
-            y: frame.origin.y + offset.y,
-            width: frame.width + sizeOffset.width,
-            height: frame.height + sizeOffset.height
-        )
+        node.presentedFrame(at: time)
     }
 
     private func calculateLayoutRecursive(
@@ -1106,28 +1117,36 @@ final class DwindleLayoutEngine {
 
     func animateWindowMovements(
         oldFrames: [WindowToken: CGRect],
+        previousTargetFrames: [WindowToken: CGRect],
         newFrames: [WindowToken: CGRect],
+        startTime: TimeInterval,
         motion: MotionSnapshot
     ) {
         for (handle, newFrame) in newFrames {
             guard let oldFrame = oldFrames[handle],
                   let node = tokenToNode[handle] else { continue }
 
-            let changed = abs(oldFrame.origin.x - newFrame.origin.x) > 0.5 ||
-                abs(oldFrame.origin.y - newFrame.origin.y) > 0.5 ||
-                abs(oldFrame.width - newFrame.width) > 0.5 ||
-                abs(oldFrame.height - newFrame.height) > 0.5
+            let targetChanged = previousTargetFrames[handle].map {
+                frameChanged($0, newFrame)
+            } ?? true
 
-            if changed {
+            if targetChanged {
                 node.animateFrom(
                     oldFrame: oldFrame,
                     newFrame: newFrame,
-                    clock: animationClock,
+                    startTime: startTime,
                     config: windowMovementAnimationConfig,
                     animated: motion.animationsEnabled
                 )
             }
         }
+    }
+
+    private func frameChanged(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) > 0.5 ||
+            abs(lhs.origin.y - rhs.origin.y) > 0.5 ||
+            abs(lhs.width - rhs.width) > 0.5 ||
+            abs(lhs.height - rhs.height) > 0.5
     }
 
     func calculateAnimatedFrames(
@@ -1139,19 +1158,15 @@ final class DwindleLayoutEngine {
 
         for (handle, frame) in baseFrames {
             guard let node = tokenToNode[handle] else { continue }
-            let posOffset = node.renderOffset(at: time)
-            let sizeOffset = node.renderSizeOffset(at: time)
+            guard let presentedFrame = node.presentedFrame(at: time) else { continue }
 
-            let hasAnimation = abs(posOffset.x) > 0.1 || abs(posOffset.y) > 0.1 ||
-                abs(sizeOffset.width) > 0.1 || abs(sizeOffset.height) > 0.1
+            let hasAnimation = abs(presentedFrame.origin.x - frame.origin.x) > 0.1 ||
+                abs(presentedFrame.origin.y - frame.origin.y) > 0.1 ||
+                abs(presentedFrame.width - frame.width) > 0.1 ||
+                abs(presentedFrame.height - frame.height) > 0.1
 
             if hasAnimation {
-                result[handle] = CGRect(
-                    x: frame.origin.x + posOffset.x,
-                    y: frame.origin.y + posOffset.y,
-                    width: frame.width + sizeOffset.width,
-                    height: frame.height + sizeOffset.height
-                )
+                result[handle] = presentedFrame
             }
         }
 

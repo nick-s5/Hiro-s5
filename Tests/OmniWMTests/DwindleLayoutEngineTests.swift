@@ -22,6 +22,21 @@ private func layoutTokenSet(_ changes: [LayoutFrameChange]) -> Set<WindowToken> 
     Set(changes.map(\.token))
 }
 
+private func frameChange(_ changes: [LayoutFrameChange], token: WindowToken) -> CGRect? {
+    changes.first(where: { $0.token == token })?.frame
+}
+
+private func isRoundedToScale(_ value: CGFloat, scale: CGFloat) -> Bool {
+    abs((value * scale).rounded() - value * scale) < 0.0001
+}
+
+private func isRoundedToScale(_ frame: CGRect, scale: CGFloat) -> Bool {
+    isRoundedToScale(frame.minX, scale: scale)
+        && isRoundedToScale(frame.minY, scale: scale)
+        && isRoundedToScale(frame.width, scale: scale)
+        && isRoundedToScale(frame.height, scale: scale)
+}
+
 private func applyResolvedDwindleSettingsForEngineTests(
     _ settings: ResolvedDwindleSettings,
     to engine: DwindleLayoutEngine
@@ -372,6 +387,161 @@ private func configureWorkspacesAsDwindle(
         )
     }
 
+    @Test func presentedFramesUseCurrentAnimationOffsets() {
+        let engine = DwindleLayoutEngine()
+        let wsId = UUID()
+        let handle = makeTestHandle(pid: 72)
+
+        _ = engine.syncWindows([handle], in: wsId, focusedHandle: handle)
+        let frames = engine.calculateLayout(
+            for: wsId,
+            screen: CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        )
+
+        guard let baseFrame = frames[handle.id],
+              let node = engine.findNode(for: handle.id)
+        else {
+            Issue.record("Expected Dwindle node state for presented-frame capture")
+            return
+        }
+
+        let startTime: TimeInterval = 100
+        let presentedStartFrame = CGRect(
+            x: baseFrame.minX + 320,
+            y: baseFrame.minY + 40,
+            width: baseFrame.width - 120,
+            height: baseFrame.height - 80
+        )
+        node.animateFrom(
+            oldFrame: presentedStartFrame,
+            newFrame: baseFrame,
+            startTime: startTime,
+            config: CubicConfig(duration: 10.0),
+            animated: true
+        )
+
+        let captured = engine.presentedFrames(in: wsId, at: startTime)[handle.id]
+        #expect(captured?.approximatelyEqual(to: presentedStartFrame, tolerance: 0.001) == true)
+    }
+
+    @Test func retargetingAnimationUsesPresentedFrameWithoutJumping() {
+        let engine = DwindleLayoutEngine()
+        let wsId = UUID()
+        let handle = makeTestHandle(pid: 73)
+
+        _ = engine.syncWindows([handle], in: wsId, focusedHandle: handle)
+        let frames = engine.calculateLayout(
+            for: wsId,
+            screen: CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        )
+
+        guard let baseFrame = frames[handle.id],
+              let node = engine.findNode(for: handle.id)
+        else {
+            Issue.record("Expected Dwindle node state for retargeting continuity")
+            return
+        }
+
+        let startTime: TimeInterval = 100
+        let retargetTime: TimeInterval = 101
+        let firstStartFrame = baseFrame.offsetBy(dx: 480, dy: 0)
+        node.animateFrom(
+            oldFrame: firstStartFrame,
+            newFrame: baseFrame,
+            startTime: startTime,
+            config: CubicConfig(duration: 10.0),
+            animated: true
+        )
+
+        guard let presentedBeforeRetarget = engine.presentedFrames(in: wsId, at: retargetTime)[handle.id]
+        else {
+            Issue.record("Expected presented frame before retarget")
+            return
+        }
+
+        let newTarget = baseFrame.offsetBy(dx: -260, dy: 80)
+        node.cachedFrame = newTarget
+        node.animateFrom(
+            oldFrame: presentedBeforeRetarget,
+            newFrame: newTarget,
+            startTime: retargetTime,
+            config: CubicConfig(duration: 10.0),
+            animated: true
+        )
+
+        let presentedAfterRetarget = engine.presentedFrames(in: wsId, at: retargetTime)[handle.id]
+        #expect(presentedAfterRetarget?.approximatelyEqual(to: presentedBeforeRetarget, tolerance: 0.001) == true)
+    }
+
+    @Test func unchangedDwindleTargetsKeepExistingAnimationTiming() {
+        let engine = DwindleLayoutEngine()
+        let wsId = UUID()
+        let first = makeTestHandle(pid: 74)
+        let second = makeTestHandle(pid: 75)
+        let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+
+        engine.windowMovementAnimationConfig = CubicConfig(duration: 10.0)
+        _ = engine.syncWindows([first], in: wsId, focusedHandle: first)
+        let singleFrames = engine.calculateLayout(for: wsId, screen: screen)
+
+        _ = engine.syncWindows([first, second], in: wsId, focusedHandle: first)
+        let splitFrames = engine.calculateLayout(for: wsId, screen: screen)
+        engine.animateWindowMovements(
+            oldFrames: singleFrames,
+            previousTargetFrames: singleFrames,
+            newFrames: splitFrames,
+            startTime: 100,
+            motion: .enabled
+        )
+
+        guard let midFrame = engine.presentedFrames(in: wsId, at: 101)[first.id],
+              let expectedFutureFrame = engine.presentedFrames(in: wsId, at: 102)[first.id]
+        else {
+            Issue.record("Expected active Dwindle animation frames for unchanged-target timing test")
+            return
+        }
+
+        engine.animateWindowMovements(
+            oldFrames: [first.id: midFrame],
+            previousTargetFrames: splitFrames,
+            newFrames: splitFrames,
+            startTime: 101,
+            motion: .enabled
+        )
+
+        let actualFutureFrame = engine.presentedFrames(in: wsId, at: 102)[first.id]
+        #expect(actualFutureFrame?.approximatelyEqual(to: expectedFutureFrame, tolerance: 0.001) == true)
+    }
+
+    @Test func cubicAnimationBoundsLargeRetargetVelocity() {
+        let towardTarget = CubicAnimation(
+            from: 1.0,
+            to: 0.0,
+            startTime: 0,
+            initialVelocity: -1000,
+            config: CubicConfig(duration: 1.0)
+        )
+        let awayFromTarget = CubicAnimation(
+            from: 1.0,
+            to: 0.0,
+            startTime: 0,
+            initialVelocity: 1000,
+            config: CubicConfig(duration: 1.0)
+        )
+
+        for animation in [towardTarget, awayFromTarget] {
+            for step in 0 ... 20 {
+                let value = animation.value(at: Double(step) / 20.0)
+                #expect(value >= -0.0001)
+                #expect(value <= 1.0001)
+            }
+        }
+
+        #expect(towardTarget.velocity(at: 0) >= -3.0001)
+        #expect(awayFromTarget.velocity(at: 0) <= 0)
+        #expect(awayFromTarget.velocity(at: 0) >= -3.0001)
+    }
+
     @Test @MainActor func steadyRelayoutPlanUsesTokensWithoutVisibilityDiffs() async throws {
         let controller = makeLayoutPlanTestController()
         guard let monitor = controller.workspaceManager.monitors.first,
@@ -554,6 +724,88 @@ private func configureWorkspacesAsDwindle(
             )
         )
         #expect(plan.diff.visibilityChanges.isEmpty)
+    }
+
+    @Test @MainActor func relayoutPlanUsesPresentedFrameForInitialAnimationDiff() async throws {
+        let controller = makeLayoutPlanTestController()
+        guard let monitor = controller.workspaceManager.monitors.first,
+              let workspaceId = controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id
+        else {
+            Issue.record("Missing monitor or active workspace for Dwindle initial animation frame test")
+            return
+        }
+
+        configureWorkspaceAsDwindle(on: controller, workspaceId: workspaceId)
+        controller.enableDwindleLayout()
+        controller.dwindleEngine?.windowMovementAnimationConfig = CubicConfig(duration: 10.0)
+        await waitForLayoutPlanRefreshWork(on: controller)
+
+        let firstToken = addLayoutPlanTestWindow(on: controller, workspaceId: workspaceId, windowId: 711)
+        let initialPlans = try await controller.dwindleLayoutHandler.layoutWithDwindleEngine(
+            activeWorkspaces: [workspaceId]
+        )
+        guard let initialFrame = frameChange(initialPlans.first?.diff.frameChanges ?? [], token: firstToken) else {
+            Issue.record("Expected initial Dwindle frame for first window")
+            return
+        }
+        controller.layoutRefreshController.executeLayoutPlans(initialPlans)
+
+        _ = addLayoutPlanTestWindow(on: controller, workspaceId: workspaceId, windowId: 712)
+        let animationPlans = try await controller.dwindleLayoutHandler.layoutWithDwindleEngine(
+            activeWorkspaces: [workspaceId]
+        )
+        guard let plan = animationPlans.first,
+              let emittedFrame = frameChange(plan.diff.frameChanges, token: firstToken),
+              let targetFrame = controller.dwindleEngine?.currentFrames(in: workspaceId)[firstToken]
+        else {
+            Issue.record("Expected Dwindle animation plan and target frame")
+            return
+        }
+
+        #expect(
+            hasDwindleAnimationDirective(
+                plan.animationDirectives,
+                workspaceId: workspaceId,
+                monitorId: monitor.id
+            )
+        )
+        #expect(emittedFrame.approximatelyEqual(to: initialFrame, tolerance: 0.5))
+        #expect(!emittedFrame.approximatelyEqual(to: targetFrame, tolerance: 0.5))
+    }
+
+    @Test @MainActor func relayoutPlanRoundsDwindleFramesToMonitorScale() async throws {
+        let monitor = makeLayoutPlanTestMonitor(
+            displayId: layoutPlanTestSyntheticDisplayId(7),
+            width: 1001.25,
+            height: 777.25
+        )
+        let controller = makeLayoutPlanTestController(monitors: [monitor])
+        guard let workspaceId = controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id
+        else {
+            Issue.record("Missing active workspace for Dwindle rounded frame test")
+            return
+        }
+
+        configureWorkspaceAsDwindle(on: controller, workspaceId: workspaceId)
+        controller.enableDwindleLayout()
+        await waitForLayoutPlanRefreshWork(on: controller)
+
+        _ = addLayoutPlanTestWindow(on: controller, workspaceId: workspaceId, windowId: 713)
+        _ = addLayoutPlanTestWindow(on: controller, workspaceId: workspaceId, windowId: 714)
+        let plans = try await controller.dwindleLayoutHandler.layoutWithDwindleEngine(
+            activeWorkspaces: [workspaceId]
+        )
+
+        guard let plan = plans.first else {
+            Issue.record("Expected Dwindle plan for rounded frame test")
+            return
+        }
+
+        #expect(!plan.diff.frameChanges.isEmpty)
+        #expect(plan.diff.frameChanges.allSatisfy { isRoundedToScale($0.frame, scale: 2.0) })
+        if let focusedFrame = plan.diff.focusedFrame {
+            #expect(isRoundedToScale(focusedFrame.frame, scale: 2.0))
+        }
     }
 
     @Test @MainActor func activeAnimationTickReappliesFocusedBorder() async throws {
@@ -778,14 +1030,16 @@ private func configureWorkspacesAsDwindle(
             activeWorkspaces: [workspaceId]
         )
         guard let overridePlan = overridePlans.first,
-              let overrideFrame = overridePlan.diff.frameChanges.first(where: { $0.token == token })?.frame
+              let emittedFrame = frameChange(overridePlan.diff.frameChanges, token: token),
+              let overrideTargetFrame = controller.dwindleEngine?.currentFrames(in: workspaceId)[token]
         else {
             Issue.record("Expected a Dwindle frame after applying monitor override settings")
             return
         }
 
-        #expect(baselineFrame.width > overrideFrame.width)
-        #expect(abs(overrideFrame.width - overrideFrame.height) < 0.5)
+        #expect(baselineFrame.width > overrideTargetFrame.width)
+        #expect(abs(overrideTargetFrame.width - overrideTargetFrame.height) < 0.5)
+        #expect(!emittedFrame.approximatelyEqual(to: overrideTargetFrame, tolerance: 0.5))
     }
 
     @Test @MainActor func nonFocusedWorkspacePlanDoesNotClearFocusedBorder() async throws {

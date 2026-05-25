@@ -306,7 +306,9 @@ import QuartzCore
     ) -> WorkspaceLayoutPlan {
         applyResolvedSettings(snapshot.settings, to: engine)
 
-        let oldFrames = engine.currentFrames(in: snapshot.workspaceId)
+        let now = controller?.animationClock.now() ?? CACurrentMediaTime()
+        let previousTargetFrames = engine.currentFrames(in: snapshot.workspaceId)
+        let oldFrames = engine.presentedFrames(in: snapshot.workspaceId, at: now)
         let windowTokens = snapshot.windows.map(\.token)
         _ = engine.syncWindows(
             windowTokens,
@@ -335,18 +337,27 @@ import QuartzCore
 
         engine.animateWindowMovements(
             oldFrames: oldFrames,
+            previousTargetFrames: previousTargetFrames,
             newFrames: newFrames,
+            startTime: now,
             motion: controller?.motionPolicy.snapshot() ?? .enabled
         )
 
-        let now = CACurrentMediaTime()
         let animationsActive = engine.hasActiveAnimations(in: snapshot.workspaceId, at: now)
+        let diffFrames = animationsActive
+            ? engine.calculateAnimatedFrames(
+                baseFrames: newFrames,
+                in: snapshot.workspaceId,
+                at: now
+            )
+            : newFrames
         let diff = layoutDiff(
             windows: snapshot.windows,
-            frames: newFrames,
+            frames: diffFrames,
             selectedToken: rememberedFocusToken,
             confirmedFocusedToken: snapshot.confirmedFocusedToken,
-            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace
+            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace,
+            scale: snapshot.monitor.scale
         )
         let directives: [AnimationDirective] = animationsActive
             ? [.startDwindleAnimation(workspaceId: snapshot.workspaceId, monitorId: snapshot.monitor.monitorId)]
@@ -379,7 +390,8 @@ import QuartzCore
             frames: frames,
             selectedToken: snapshot.selectedToken,
             confirmedFocusedToken: snapshot.confirmedFocusedToken,
-            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace
+            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace,
+            scale: snapshot.monitor.scale
         )
 
         return WorkspaceLayoutPlan(
@@ -411,7 +423,8 @@ import QuartzCore
             frames: animatedFrames,
             selectedToken: snapshot.selectedToken,
             confirmedFocusedToken: snapshot.confirmedFocusedToken,
-            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace
+            canRestoreHiddenWorkspaceWindows: snapshot.isActiveWorkspace,
+            scale: snapshot.monitor.scale
         )
 
         return WorkspaceLayoutPlan(
@@ -427,9 +440,11 @@ import QuartzCore
         frames: [WindowToken: CGRect],
         selectedToken: WindowToken?,
         confirmedFocusedToken: WindowToken?,
-        canRestoreHiddenWorkspaceWindows: Bool
+        canRestoreHiddenWorkspaceWindows: Bool,
+        scale: CGFloat
     ) -> WorkspaceLayoutDiff {
         var diff = WorkspaceLayoutDiff()
+        let effectiveScale = max(scale, 1.0)
         let suspendedTokens = Set(
             windows.lazy
                 .filter(\.isNativeFullscreenSuspended)
@@ -439,7 +454,7 @@ import QuartzCore
             if window.isNativeFullscreenSuspended {
                 if canRestoreHiddenWorkspaceWindows,
                    window.showsNativeFullscreenPlaceholder,
-                   let frame = frames[window.token]
+                   let frame = frames[window.token]?.roundedToPhysicalPixels(scale: effectiveScale)
                 {
                     diff.nativeFullscreenPlaceholders.append(
                         .init(
@@ -459,7 +474,7 @@ import QuartzCore
                     .init(token: window.token, hiddenState: hiddenState)
                 )
             }
-            guard let frame = frames[window.token] else { continue }
+            guard let frame = frames[window.token]?.roundedToPhysicalPixels(scale: effectiveScale) else { continue }
             if window.needsResizePlaceholder(for: frame) {
                 diff.resizePlaceholders.append(
                     .init(
@@ -482,7 +497,7 @@ import QuartzCore
 
         if let confirmedFocusedToken,
            !suspendedTokens.contains(confirmedFocusedToken),
-           let frame = frames[confirmedFocusedToken]
+           let frame = frames[confirmedFocusedToken]?.roundedToPhysicalPixels(scale: effectiveScale)
         {
             diff.focusedFrame = LayoutFocusedFrame(
                 token: confirmedFocusedToken,

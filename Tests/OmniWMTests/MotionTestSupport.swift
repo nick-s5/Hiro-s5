@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QuartzCore
 @testable import OmniWM
 
 @MainActor
@@ -300,7 +301,7 @@ extension DwindleNode {
         animateFrom(
             oldFrame: oldFrame,
             newFrame: newFrame,
-            clock: clock,
+            startTime: clock?.now() ?? CACurrentMediaTime(),
             config: config,
             animated: true
         )

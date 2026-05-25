@@ -185,7 +185,7 @@ final class DwindleNode {
     func animateFrom(
         oldFrame: CGRect,
         newFrame: CGRect,
-        clock: AnimationClock?,
+        startTime: TimeInterval,
         config: CubicConfig,
         animated: Bool
     ) {
@@ -194,12 +194,10 @@ final class DwindleNode {
             return
         }
 
-        let now = clock?.now() ?? CACurrentMediaTime()
-
-        let velX = moveXAnimation?.currentVelocity(at: now) ?? 0
-        let velY = moveYAnimation?.currentVelocity(at: now) ?? 0
-        let velW = sizeWAnimation?.currentVelocity(at: now) ?? 0
-        let velH = sizeHAnimation?.currentVelocity(at: now) ?? 0
+        let velX = moveXAnimation?.currentVelocity(at: startTime) ?? 0
+        let velY = moveYAnimation?.currentVelocity(at: startTime) ?? 0
+        let velW = sizeWAnimation?.currentVelocity(at: startTime) ?? 0
+        let velH = sizeHAnimation?.currentVelocity(at: startTime) ?? 0
 
         let displacementX = oldFrame.origin.x - newFrame.origin.x
         let displacementY = oldFrame.origin.y - newFrame.origin.y
@@ -211,7 +209,7 @@ final class DwindleNode {
             let anim = CubicAnimation(
                 from: 1.0,
                 to: 0.0,
-                startTime: now,
+                startTime: startTime,
                 initialVelocity: normalizedVel,
                 config: config
             )
@@ -225,7 +223,7 @@ final class DwindleNode {
             let anim = CubicAnimation(
                 from: 1.0,
                 to: 0.0,
-                startTime: now,
+                startTime: startTime,
                 initialVelocity: normalizedVel,
                 config: config
             )
@@ -239,7 +237,7 @@ final class DwindleNode {
             let anim = CubicAnimation(
                 from: 1.0,
                 to: 0.0,
-                startTime: now,
+                startTime: startTime,
                 initialVelocity: normalizedVel,
                 config: config
             )
@@ -253,7 +251,7 @@ final class DwindleNode {
             let anim = CubicAnimation(
                 from: 1.0,
                 to: 0.0,
-                startTime: now,
+                startTime: startTime,
                 initialVelocity: normalizedVel,
                 config: config
             )
@@ -274,6 +272,18 @@ final class DwindleNode {
         CGSize(
             width: sizeWAnimation?.currentOffset(at: time) ?? 0,
             height: sizeHAnimation?.currentOffset(at: time) ?? 0
+        )
+    }
+
+    func presentedFrame(at time: TimeInterval) -> CGRect? {
+        guard let cachedFrame else { return nil }
+        let posOffset = renderOffset(at: time)
+        let sizeOffset = renderSizeOffset(at: time)
+        return CGRect(
+            x: cachedFrame.origin.x + posOffset.x,
+            y: cachedFrame.origin.y + posOffset.y,
+            width: cachedFrame.width + sizeOffset.width,
+            height: cachedFrame.height + sizeOffset.height
         )
     }
 
