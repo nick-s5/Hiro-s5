@@ -20,6 +20,7 @@ private struct PersistedWindowRestoreCatalogBuildSnapshot: Sendable {
 }
 
 private struct PersistedWindowRestoreCatalogBuildEntry: Sendable {
+    let token: WindowToken
     let metadata: ManagedReplacementMetadata
     let workspaceName: String
     let topologyProfile: TopologyProfile
@@ -28,6 +29,7 @@ private struct PersistedWindowRestoreCatalogBuildEntry: Sendable {
     let normalizedFloatingOrigin: CGPoint?
     let restoreToFloating: Bool
     let rescueEligible: Bool
+    let niriPlacement: PersistedNiriPlacement?
 }
 
 private enum PersistedWindowRestoreCatalogBuilder {
@@ -43,6 +45,10 @@ private enum PersistedWindowRestoreCatalogBuilder {
             guard let key = PersistedWindowRestoreKey(metadata: snapshotEntry.metadata) else { continue }
             let persistedEntry = PersistedWindowRestoreEntry(
                 key: key,
+                identity: PersistedWindowRestoreIdentity(
+                    token: snapshotEntry.token,
+                    metadata: snapshotEntry.metadata
+                ),
                 restoreIntent: PersistedRestoreIntent(
                     workspaceName: snapshotEntry.workspaceName,
                     topologyProfile: snapshotEntry.topologyProfile,
@@ -50,7 +56,8 @@ private enum PersistedWindowRestoreCatalogBuilder {
                     floatingFrame: snapshotEntry.floatingFrame,
                     normalizedFloatingOrigin: snapshotEntry.normalizedFloatingOrigin,
                     restoreToFloating: snapshotEntry.restoreToFloating,
-                    rescueEligible: snapshotEntry.rescueEligible
+                    rescueEligible: snapshotEntry.rescueEligible,
+                    niriPlacement: snapshotEntry.niriPlacement
                 )
             )
             candidatesByBaseKey[key.baseKey, default: []].append(
@@ -67,7 +74,11 @@ private enum PersistedWindowRestoreCatalogBuilder {
                 continue
             }
 
-            let candidatesByTitle = Dictionary(grouping: candidates, by: { $0.key.title })
+            let identityCandidates = candidates.filter { $0.entry.identity != nil }
+            persistedEntries.append(contentsOf: identityCandidates.map(\.entry))
+
+            let semanticCandidates = candidates.filter { $0.entry.identity == nil }
+            let candidatesByTitle = Dictionary(grouping: semanticCandidates, by: { $0.key.title })
             for (title, titledCandidates) in candidatesByTitle where title != nil && titledCandidates.count == 1 {
                 if let candidate = titledCandidates.first {
                     persistedEntries.append(candidate.entry)
@@ -84,7 +95,13 @@ private enum PersistedWindowRestoreCatalogBuilder {
             if lhs.key.baseKey.bundleId != rhs.key.baseKey.bundleId {
                 return lhs.key.baseKey.bundleId < rhs.key.baseKey.bundleId
             }
-            return (lhs.key.title ?? "") < (rhs.key.title ?? "")
+            if (lhs.key.title ?? "") != (rhs.key.title ?? "") {
+                return (lhs.key.title ?? "") < (rhs.key.title ?? "")
+            }
+            if lhs.identity?.pid != rhs.identity?.pid {
+                return (lhs.identity?.pid ?? Int32.min) < (rhs.identity?.pid ?? Int32.min)
+            }
+            return (lhs.identity?.windowId ?? Int.min) < (rhs.identity?.windowId ?? Int.min)
         }
 
         return PersistedWindowRestoreCatalog(entries: persistedEntries)
@@ -184,7 +201,7 @@ final class WorkspaceManager {
     private let bootPersistedWindowRestoreCatalog: PersistedWindowRestoreCatalog
     private var nativeFullscreenRecordsByOriginalToken: [WindowToken: NativeFullscreenRecord] = [:]
     private var nativeFullscreenOriginalTokenByCurrentToken: [WindowToken: WindowToken] = [:]
-    private var consumedBootPersistedWindowRestoreKeys: Set<PersistedWindowRestoreKey> = []
+    private var consumedBootPersistedWindowRestoreEntries: Set<PersistedWindowRestoreConsumptionKey> = []
     private var persistedWindowRestoreCatalogDirty = false
     private var persistedWindowRestoreCatalogSaveScheduled = false
     private var persistedWindowRestoreCatalogBuildInFlight = false
@@ -554,9 +571,10 @@ final class WorkspaceManager {
         guard let metadata = windows.managedReplacementMetadata(for: token),
               let hydrationPlan = restorePlanner.planPersistedHydration(
                   .init(
+                      token: token,
                       metadata: metadata,
                       catalog: bootPersistedWindowRestoreCatalog,
-                      consumedKeys: consumedBootPersistedWindowRestoreKeys,
+                      consumedEntries: consumedBootPersistedWindowRestoreEntries,
                       monitors: monitors,
                       workspaceIdForName: { [weak self] workspaceName in
                           self?.workspaceId(for: workspaceName, createIfMissing: false)
@@ -572,7 +590,9 @@ final class WorkspaceManager {
             monitorId: hydrationPlan.preferredMonitorId ?? effectiveMonitor(for: hydrationPlan.workspaceId)?.id,
             targetMode: hydrationPlan.targetMode,
             floatingFrame: hydrationPlan.floatingFrame,
-            consumedKey: hydrationPlan.consumedKey
+            niriPlacement: hydrationPlan.niriPlacement,
+            consumedKey: hydrationPlan.consumedKey,
+            consumedEntry: hydrationPlan.consumedEntry
         )
     }
 
@@ -636,6 +656,12 @@ final class WorkspaceManager {
             workspaceId: hydration.workspaceId
         )
 
+        if let entry = windows.entry(for: token) {
+            var restoreIntent = StateReducer.restoreIntent(for: entry, monitors: monitors)
+            restoreIntent.niriPlacement = hydration.niriPlacement
+            windows.setRestoreIntent(restoreIntent, for: token)
+        }
+
         if let floatingFrame = hydration.floatingFrame {
             let referenceMonitor = hydration.monitorId.flatMap(monitor(byId:))
             let referenceVisibleFrame = referenceMonitor?.visibleFrame ?? floatingFrame
@@ -654,7 +680,7 @@ final class WorkspaceManager {
             )
         }
 
-        consumedBootPersistedWindowRestoreKeys.insert(hydration.consumedKey)
+        consumedBootPersistedWindowRestoreEntries.insert(hydration.consumedEntry)
         if focusChanged {
             notifySessionStateChanged()
         }
@@ -697,7 +723,11 @@ final class WorkspaceManager {
     }
 
     func consumedBootPersistedWindowRestoreKeysForTests() -> Set<PersistedWindowRestoreKey> {
-        consumedBootPersistedWindowRestoreKeys
+        Set(consumedBootPersistedWindowRestoreEntries.map(\.key))
+    }
+
+    func consumedBootPersistedWindowRestoreEntryCountForTests() -> Int {
+        consumedBootPersistedWindowRestoreEntries.count
     }
 
     private func schedulePersistedWindowRestoreCatalogSave() {
@@ -781,6 +811,7 @@ final class WorkspaceManager {
 
             snapshotEntries.append(
                 PersistedWindowRestoreCatalogBuildEntry(
+                    token: entry.token,
                     metadata: metadata,
                     workspaceName: workspaceName,
                     topologyProfile: topologyProfile,
@@ -788,7 +819,8 @@ final class WorkspaceManager {
                     floatingFrame: restoreIntent.floatingFrame,
                     normalizedFloatingOrigin: restoreIntent.normalizedFloatingOrigin,
                     restoreToFloating: restoreIntent.restoreToFloating,
-                    rescueEligible: restoreIntent.rescueEligible
+                    rescueEligible: restoreIntent.rescueEligible,
+                    niriPlacement: restoreIntent.niriPlacement
                 )
             )
         }
@@ -2375,6 +2407,26 @@ final class WorkspaceManager {
 
     func restoreIntent(for token: WindowToken) -> RestoreIntent? {
         windows.restoreIntent(for: token)
+    }
+
+    func setNiriRestorePlacements(_ placements: [WindowToken: PersistedNiriPlacement]) {
+        guard !placements.isEmpty else { return }
+
+        var didChange = false
+        for (token, placement) in placements {
+            guard let entry = windows.entry(for: token), entry.mode == .tiling else { continue }
+
+            var restoreIntent = StateReducer.restoreIntent(for: entry, monitors: monitors)
+            guard restoreIntent.niriPlacement != placement else { continue }
+
+            restoreIntent.niriPlacement = placement
+            windows.setRestoreIntent(restoreIntent, for: token)
+            didChange = true
+        }
+
+        if didChange {
+            schedulePersistedWindowRestoreCatalogSave()
+        }
     }
 
     func replacementCorrelation(for token: WindowToken) -> ReplacementCorrelation? {

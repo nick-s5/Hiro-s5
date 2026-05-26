@@ -40,9 +40,10 @@ struct RestorePlanner {
     }
 
     struct PersistedHydrationInput {
+        let token: WindowToken
         let metadata: ManagedReplacementMetadata
         let catalog: PersistedWindowRestoreCatalog
-        let consumedKeys: Set<PersistedWindowRestoreKey>
+        let consumedEntries: Set<PersistedWindowRestoreConsumptionKey>
         let monitors: [Monitor]
         let workspaceIdForName: (String) -> WorkspaceDescriptor.ID?
     }
@@ -53,7 +54,9 @@ struct RestorePlanner {
         let preferredMonitorId: Monitor.ID?
         let targetMode: TrackedWindowMode
         let floatingFrame: CGRect?
+        let niriPlacement: PersistedNiriPlacement?
         let consumedKey: PersistedWindowRestoreKey
+        let consumedEntry: PersistedWindowRestoreConsumptionKey
     }
 
     struct FloatingRescueCandidate: Equatable {
@@ -242,9 +245,12 @@ struct RestorePlanner {
     }
 
     func planPersistedHydration(_ input: PersistedHydrationInput) -> PersistedHydrationPlan? {
-        let matches = input.catalog.entries.filter { entry in
-            !input.consumedKeys.contains(entry.key) && entry.key.matches(input.metadata)
-        }
+        let matches = persistedHydrationMatches(
+            token: input.token,
+            metadata: input.metadata,
+            catalog: input.catalog,
+            consumedEntries: input.consumedEntries
+        )
 
         guard matches.count == 1,
               let persistedEntry = matches.first,
@@ -274,8 +280,38 @@ struct RestorePlanner {
             preferredMonitorId: preferredMonitor?.id,
             targetMode: targetMode,
             floatingFrame: floatingFrame,
-            consumedKey: persistedEntry.key
+            niriPlacement: targetMode == .tiling ? persistedEntry.restoreIntent.niriPlacement : nil,
+            consumedKey: persistedEntry.key,
+            consumedEntry: PersistedWindowRestoreConsumptionKey(entry: persistedEntry)
         )
+    }
+
+    private func persistedHydrationMatches(
+        token: WindowToken,
+        metadata: ManagedReplacementMetadata,
+        catalog: PersistedWindowRestoreCatalog,
+        consumedEntries: Set<PersistedWindowRestoreConsumptionKey>
+    ) -> [PersistedWindowRestoreEntry] {
+        let allHardMatches = catalog.entries.filter { entry in
+            entry.identity?.matches(token: token, metadata: metadata) == true
+        }
+        let availableEntries = catalog.entries.filter { entry in
+            !consumedEntries.contains(PersistedWindowRestoreConsumptionKey(entry: entry))
+        }
+        let availableHardMatches = allHardMatches.filter { entry in
+            !consumedEntries.contains(PersistedWindowRestoreConsumptionKey(entry: entry))
+        }
+
+        if !availableHardMatches.isEmpty {
+            return availableHardMatches
+        }
+        if !allHardMatches.isEmpty {
+            return []
+        }
+
+        return availableEntries.filter { entry in
+            entry.key.matches(metadata)
+        }
     }
 
     func planFloatingRescue(_ candidates: [FloatingRescueCandidate]) -> FloatingRescuePlan {

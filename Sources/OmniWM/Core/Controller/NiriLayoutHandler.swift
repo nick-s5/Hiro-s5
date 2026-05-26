@@ -347,6 +347,8 @@ enum NiriWindowMoveResult {
             removedNodeIds: snapshot.removalSeed?.removedNodeIds ?? []
         )
 
+        restoreInitialNiriPlacementsIfNeeded(pass: pass, windowTokens: windowTokens)
+
         let newTokens = syncAndInsert(
             pass: pass,
             motion: motion,
@@ -378,7 +380,7 @@ enum NiriWindowMoveResult {
             snapshot: snapshot
         )
 
-        return computeLayoutPlan(
+        let plan = computeLayoutPlan(
             pass: pass,
             motion: motion,
             state: state,
@@ -387,6 +389,30 @@ enum NiriWindowMoveResult {
             viewportNeedsRecalc: selection.viewportNeedsRecalc,
             snapshot: snapshot
         )
+
+        controller?.workspaceManager.setNiriRestorePlacements(
+            pass.engine.persistedPlacements(in: pass.wsId)
+        )
+
+        return plan
+    }
+
+    private func restoreInitialNiriPlacementsIfNeeded(
+        pass: NiriLayoutPass,
+        windowTokens: [WindowToken]
+    ) {
+        guard let controller else { return }
+
+        var placements: [WindowToken: PersistedNiriPlacement] = [:]
+        placements.reserveCapacity(windowTokens.count)
+
+        for token in windowTokens {
+            if let placement = controller.workspaceManager.restoreIntent(for: token)?.niriPlacement {
+                placements[token] = placement
+            }
+        }
+
+        pass.engine.restoreInitialPlacements(placements, matching: windowTokens, in: pass.wsId)
     }
 
     private func processWindowRemovals(

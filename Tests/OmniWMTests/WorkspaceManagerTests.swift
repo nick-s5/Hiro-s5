@@ -139,6 +139,82 @@ private func workspaceConfigurations(
         #expect(relaunchedManager.consumedBootPersistedWindowRestoreKeysForTests() == Set(persistedEntries.map(\.key)))
     }
 
+    @Test func relaunchHydratesSameTitleWindowsByPersistedIdentity() throws {
+        let defaults = makeWorkspaceManagerTestDefaults()
+
+        let initialSettings = SettingsStore(defaults: defaults)
+        initialSettings.workspaceConfigurations = workspaceConfigurations([
+            ("1", .main),
+            ("2", .main)
+        ])
+        let initialManager = WorkspaceManager(settings: initialSettings)
+        let monitor = makeWorkspaceManagerTestMonitor(displayId: 402, name: "Main", x: 0, y: 0)
+        initialManager.applyMonitorConfigurationChange([monitor])
+
+        let initialWorkspace1 = try #require(initialManager.workspaceId(for: "1", createIfMissing: true))
+        let initialWorkspace2 = try #require(initialManager.workspaceId(for: "2", createIfMissing: true))
+        let firstToken = initialManager.addWindow(
+            makeWorkspaceManagerTestWindow(windowId: 4021),
+            pid: 4021,
+            windowId: 4021,
+            to: initialWorkspace1
+        )
+        let secondToken = initialManager.addWindow(
+            makeWorkspaceManagerTestWindow(windowId: 4022),
+            pid: 4022,
+            windowId: 4022,
+            to: initialWorkspace2
+        )
+        _ = initialManager.setManagedReplacementMetadata(
+            makeWorkspaceManagerReplacementMetadata(
+                workspaceId: initialWorkspace1,
+                title: "Shared Title"
+            ),
+            for: firstToken
+        )
+        _ = initialManager.setManagedReplacementMetadata(
+            makeWorkspaceManagerReplacementMetadata(
+                workspaceId: initialWorkspace2,
+                title: "Shared Title"
+            ),
+            for: secondToken
+        )
+        initialManager.flushPersistedWindowRestoreCatalogNow()
+        let persistedEntries = initialManager.persistedWindowRestoreCatalogForTests().entries
+        #expect(persistedEntries.count == 2)
+        #expect(Set(persistedEntries.compactMap(\.identity?.windowId)) == Set([4021, 4022]))
+
+        let relaunchedManager = WorkspaceManager(settings: SettingsStore(defaults: defaults))
+        relaunchedManager.applyMonitorConfigurationChange([monitor])
+        let relaunchedWorkspace1 = try #require(relaunchedManager.workspaceId(for: "1", createIfMissing: true))
+        let relaunchedWorkspace2 = try #require(relaunchedManager.workspaceId(for: "2", createIfMissing: true))
+
+        let firstRelaunchedToken = relaunchedManager.addWindow(
+            makeWorkspaceManagerTestWindow(windowId: 4021),
+            pid: 4021,
+            windowId: 4021,
+            to: relaunchedWorkspace2,
+            managedReplacementMetadata: makeWorkspaceManagerReplacementMetadata(
+                workspaceId: relaunchedWorkspace2,
+                title: "Shared Title"
+            )
+        )
+        let secondRelaunchedToken = relaunchedManager.addWindow(
+            makeWorkspaceManagerTestWindow(windowId: 4022),
+            pid: 4022,
+            windowId: 4022,
+            to: relaunchedWorkspace1,
+            managedReplacementMetadata: makeWorkspaceManagerReplacementMetadata(
+                workspaceId: relaunchedWorkspace1,
+                title: "Shared Title"
+            )
+        )
+
+        #expect(relaunchedManager.workspace(for: firstRelaunchedToken) == relaunchedWorkspace1)
+        #expect(relaunchedManager.workspace(for: secondRelaunchedToken) == relaunchedWorkspace2)
+        #expect(relaunchedManager.consumedBootPersistedWindowRestoreEntryCountForTests() == 2)
+    }
+
     @Test func sameTopologyRelaunchRestoresFloatingGeometryAndRescueEligibility() throws {
         let defaults = makeWorkspaceManagerTestDefaults()
 
@@ -355,7 +431,7 @@ private func workspaceConfigurations(
         #expect(initialWorkspace1 != relaunchedWorkspace1)
     }
 
-    @Test func ambiguousDuplicateSemanticKeysAreRejectedFromPersistence() throws {
+    @Test func duplicateSemanticKeysWithPersistedIdentitiesAreRetainedForHardRestore() throws {
         let defaults = makeWorkspaceManagerTestDefaults()
         let settings = SettingsStore(defaults: defaults)
         settings.workspaceConfigurations = workspaceConfigurations([
@@ -388,7 +464,10 @@ private func workspaceConfigurations(
         _ = manager.setManagedReplacementMetadata(ambiguousMetadata, for: firstToken)
         _ = manager.setManagedReplacementMetadata(ambiguousMetadata, for: secondToken)
 
-        #expect(manager.persistedWindowRestoreCatalogForTests().entries.isEmpty)
+        let entries = manager.persistedWindowRestoreCatalogForTests().entries
+        #expect(entries.count == 2)
+        #expect(Set(entries.map(\.key)).count == 1)
+        #expect(Set(entries.compactMap(\.identity?.windowId)) == Set([4401, 4402]))
     }
 
     @Test func removingTrackedWindowRemovesPersistedEntryOnNextCatalogSave() throws {

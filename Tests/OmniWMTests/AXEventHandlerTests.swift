@@ -213,6 +213,7 @@ private func makeAXEventPersistedRestoreCatalog(
         entries: [
             PersistedWindowRestoreEntry(
                 key: key,
+                identity: nil,
                 restoreIntent: PersistedRestoreIntent(
                     workspaceName: workspaceName,
                     topologyProfile: TopologyProfile(monitors: [monitor]),

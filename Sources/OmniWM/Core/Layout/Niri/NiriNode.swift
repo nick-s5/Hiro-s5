@@ -1,13 +1,13 @@
 import AppKit
 import Foundation
 
-enum ColumnDisplay: Equatable {
+enum ColumnDisplay: Codable, Equatable, Sendable {
     case normal
 
     case tabbed
 }
 
-enum SizingMode: Equatable {
+enum SizingMode: Codable, Equatable, Sendable {
     case normal
 
     case maximized
@@ -15,7 +15,7 @@ enum SizingMode: Equatable {
     case fullscreen
 }
 
-enum ProportionalSize: Equatable {
+enum ProportionalSize: Codable, Equatable, Sendable {
     case proportion(CGFloat)
 
     case fixed(CGFloat)
@@ -40,7 +40,7 @@ enum ProportionalSize: Equatable {
     static let `default` = ProportionalSize.proportion(1.0)
 }
 
-enum WeightedSize: Equatable {
+enum WeightedSize: Codable, Equatable, Sendable {
     case auto(weight: CGFloat)
 
     case fixed(CGFloat)

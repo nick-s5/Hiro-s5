@@ -16,7 +16,9 @@ struct PersistedHydrationMutation: Equatable {
     let monitorId: Monitor.ID?
     let targetMode: TrackedWindowMode
     let floatingFrame: CGRect?
+    let niriPlacement: PersistedNiriPlacement?
     let consumedKey: PersistedWindowRestoreKey
+    let consumedEntry: PersistedWindowRestoreConsumptionKey
 }
 
 struct RestoreRefreshPlan: Equatable {

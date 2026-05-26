@@ -487,6 +487,7 @@ final class SettingsStore {
         self.persistence = persistence
         self.runtimeState = runtimeState
         self.autosaveEnabled = autosaveEnabled
+        runtimeState.importWindowRestoreCatalogIfMissing(fromLegacyDirectory: persistence.directoryURL)
         hiddenBarIsCollapsed = runtimeState.hiddenBarIsCollapsed
 
         applyExport(

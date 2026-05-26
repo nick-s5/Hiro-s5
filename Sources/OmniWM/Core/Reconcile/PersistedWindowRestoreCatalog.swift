@@ -1,6 +1,30 @@
 import CoreGraphics
 import Foundation
 
+struct PersistedNiriColumnState: Codable, Equatable, Sendable {
+    let displayMode: ColumnDisplay
+    let activeTileIndex: Int
+    let width: ProportionalSize
+    let presetWidthIndex: Int?
+    let isFullWidth: Bool
+    let savedWidth: ProportionalSize?
+    let hasManualSingleWindowWidthOverride: Bool
+}
+
+struct PersistedNiriWindowState: Codable, Equatable, Sendable {
+    let sizingMode: SizingMode
+    let height: WeightedSize
+    let savedHeight: WeightedSize?
+    let windowWidth: WeightedSize
+}
+
+struct PersistedNiriPlacement: Codable, Equatable, Sendable {
+    let columnIndex: Int
+    let tileIndex: Int
+    let column: PersistedNiriColumnState
+    let window: PersistedNiriWindowState
+}
+
 struct PersistedRestoreIntent: Codable, Equatable, Sendable {
     let workspaceName: String
     let topologyProfile: TopologyProfile
@@ -9,6 +33,51 @@ struct PersistedRestoreIntent: Codable, Equatable, Sendable {
     let normalizedFloatingOrigin: CGPoint?
     let restoreToFloating: Bool
     let rescueEligible: Bool
+    let niriPlacement: PersistedNiriPlacement?
+
+    init(
+        workspaceName: String,
+        topologyProfile: TopologyProfile,
+        preferredMonitor: DisplayFingerprint?,
+        floatingFrame: CGRect?,
+        normalizedFloatingOrigin: CGPoint?,
+        restoreToFloating: Bool,
+        rescueEligible: Bool,
+        niriPlacement: PersistedNiriPlacement? = nil
+    ) {
+        self.workspaceName = workspaceName
+        self.topologyProfile = topologyProfile
+        self.preferredMonitor = preferredMonitor
+        self.floatingFrame = floatingFrame
+        self.normalizedFloatingOrigin = normalizedFloatingOrigin
+        self.restoreToFloating = restoreToFloating
+        self.rescueEligible = rescueEligible
+        self.niriPlacement = niriPlacement
+    }
+}
+
+struct PersistedWindowRestoreIdentity: Codable, Equatable, Hashable, Sendable {
+    let pid: Int32
+    let windowId: Int
+    let bundleId: String
+
+    init?(token: WindowToken, metadata: ManagedReplacementMetadata) {
+        guard let bundleId = PersistedWindowRestoreBaseKey.normalizeBundleId(metadata.bundleId) else {
+            return nil
+        }
+
+        pid = token.pid
+        windowId = token.windowId
+        self.bundleId = bundleId
+    }
+
+    func matches(token: WindowToken, metadata: ManagedReplacementMetadata) -> Bool {
+        guard let otherBundleId = PersistedWindowRestoreBaseKey.normalizeBundleId(metadata.bundleId) else {
+            return false
+        }
+
+        return pid == token.pid && windowId == token.windowId && bundleId == otherBundleId
+    }
 }
 
 struct PersistedWindowRestoreBaseKey: Codable, Equatable, Hashable, Sendable {
@@ -46,7 +115,7 @@ struct PersistedWindowRestoreBaseKey: Codable, Equatable, Hashable, Sendable {
         )
     }
 
-    private static func normalizeBundleId(_ bundleId: String?) -> String? {
+    static func normalizeBundleId(_ bundleId: String?) -> String? {
         guard let bundleId = normalizeText(bundleId) else {
             return nil
         }
@@ -96,7 +165,18 @@ struct PersistedWindowRestoreKey: Codable, Equatable, Hashable, Sendable {
 
 struct PersistedWindowRestoreEntry: Codable, Equatable, Sendable {
     let key: PersistedWindowRestoreKey
+    let identity: PersistedWindowRestoreIdentity?
     let restoreIntent: PersistedRestoreIntent
+}
+
+struct PersistedWindowRestoreConsumptionKey: Equatable, Hashable, Sendable {
+    let key: PersistedWindowRestoreKey
+    let identity: PersistedWindowRestoreIdentity?
+
+    init(entry: PersistedWindowRestoreEntry) {
+        key = entry.key
+        identity = entry.identity
+    }
 }
 
 struct PersistedWindowRestoreCatalog: Codable, Equatable, Sendable {

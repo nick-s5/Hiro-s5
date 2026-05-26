@@ -45,6 +45,41 @@ final class RuntimeStateStore {
         write(state)
     }
 
+    @discardableResult
+    func importWindowRestoreCatalogIfMissing(fromLegacyDirectory legacyDirectory: URL?) -> Bool {
+        guard state.windowRestoreCatalog?.entries.isEmpty ?? true,
+              let legacyDirectory
+        else {
+            return false
+        }
+
+        let legacyFileURL = legacyDirectory.appendingPathComponent(Self.fileName, isDirectory: false)
+        guard legacyFileURL.standardizedFileURL != fileURL.standardizedFileURL else {
+            return false
+        }
+
+        let legacyState = Self.readState(from: legacyFileURL)
+        guard let legacyCatalog = legacyState.windowRestoreCatalog,
+              !legacyCatalog.entries.isEmpty
+        else {
+            return false
+        }
+
+        let previousState = state
+        state.windowRestoreCatalog = legacyCatalog
+        pendingState = nil
+
+        do {
+            try writeState(state)
+            try? FileManager.default.removeItem(at: legacyFileURL)
+            return true
+        } catch {
+            state = previousState
+            report("Failed to import \(legacyFileURL.path): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func scheduleSave() {
         if !deferSaves {
             pendingState = nil
@@ -108,13 +143,17 @@ final class RuntimeStateStore {
 
     private func write(_ state: RuntimeState) {
         do {
-            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            try Self.applyPermissions(S_IRWXU, to: directoryURL)
-            let data = try JSONEncoder().encode(state)
-            try Self.writePrivateData(data, to: fileURL)
+            try writeState(state)
         } catch {
             report("Failed to save \(fileURL.path): \(error.localizedDescription)")
         }
+    }
+
+    private func writeState(_ state: RuntimeState) throws {
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Self.applyPermissions(S_IRWXU, to: directoryURL)
+        let data = try JSONEncoder().encode(state)
+        try Self.writePrivateData(data, to: fileURL)
     }
 
     private static func writePrivateData(_ data: Data, to fileURL: URL) throws {

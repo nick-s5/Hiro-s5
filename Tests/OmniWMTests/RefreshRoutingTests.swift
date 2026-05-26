@@ -62,6 +62,25 @@ private func makeRefreshTestWindowFacts(
     )
 }
 
+private func makeRefreshReplacementMetadata(
+    workspaceId: WorkspaceDescriptor.ID,
+    title: String,
+    bundleId: String = "com.example.refresh.restore",
+    mode: TrackedWindowMode = .tiling
+) -> ManagedReplacementMetadata {
+    ManagedReplacementMetadata(
+        bundleId: bundleId,
+        workspaceId: workspaceId,
+        mode: mode,
+        role: kAXWindowRole as String,
+        subrole: kAXStandardWindowSubrole as String,
+        title: title,
+        windowLevel: nil,
+        parentWindowId: nil,
+        frame: nil
+    )
+}
+
 private func makeRefreshFrameWriteResult(
     targetFrame: CGRect,
     currentFrameHint: CGRect?,
@@ -82,6 +101,7 @@ private func makeRefreshFrameWriteResult(
 
 @MainActor
 private func makeRefreshTestController(
+    settings: SettingsStore? = nil,
     windowFocusOperations: WindowFocusOperations? = nil,
     workspaceConfigurations: [WorkspaceConfiguration] = [
         WorkspaceConfiguration(name: "1", monitorAssignment: .main),
@@ -95,10 +115,10 @@ private func makeRefreshTestController(
         focusSpecificWindow: { _, _, _ in },
         raiseWindow: { _ in }
     )
-    let settings = SettingsStore(defaults: makeRefreshTestDefaults())
-    settings.workspaceConfigurations = workspaceConfigurations
+    let resolvedSettings = settings ?? SettingsStore(defaults: makeRefreshTestDefaults())
+    resolvedSettings.workspaceConfigurations = workspaceConfigurations
     let controller = WMController(
-        settings: settings,
+        settings: resolvedSettings,
         windowFocusOperations: operations
     )
     installSynchronousFrameApplySuccessOverride(on: controller)
@@ -681,6 +701,163 @@ private func syncNiriWorkspaceStatesForRefreshTests(
         #expect(RefreshReason.appUnhidden.requestRoute == .visibilityRefresh)
         #expect(RefreshReason.windowDestroyed.requestRoute == .windowRemoval)
         #expect(RefreshReason.windowRuleReevaluation.requestRoute == .relayout)
+    }
+
+    @Test @MainActor func startupRestorePreservesPersistedNiriStackedColumnsAndWidths() async throws {
+        try await withAXFrameProviderIsolationForTests {
+            let defaults = makeRefreshTestDefaults()
+            let workspaceConfigurations = [
+                WorkspaceConfiguration(name: "1", monitorAssignment: .main, layoutType: .niri)
+            ]
+            let bundleId = "com.example.refresh.niri.restore"
+            let titlesByInitialWindowId = [
+                6_101: "Launch Restore A",
+                6_102: "Launch Restore B",
+                6_103: "Launch Restore C"
+            ]
+            let titlesByRelaunchedWindowId = [
+                6_201: "Launch Restore A",
+                6_202: "Launch Restore B",
+                6_203: "Launch Restore C"
+            ]
+
+            do {
+                let initialSettings = SettingsStore(defaults: defaults)
+                let initialController = makeRefreshTestController(
+                    settings: initialSettings,
+                    workspaceConfigurations: workspaceConfigurations
+                )
+                defer { cleanupRefreshTestController(initialController) }
+                initialController.motionPolicy.animationsEnabled = false
+                initialController.enableNiriLayout(maxWindowsPerColumn: 2)
+                await waitForRefreshWork(on: initialController)
+                initialController.syncMonitorsToNiriEngine()
+
+                guard let workspaceId = initialController.activeWorkspace()?.id,
+                      let monitor = initialController.workspaceManager.monitor(for: workspaceId),
+                      let engine = initialController.niriEngine
+                else {
+                    Issue.record("Missing initial Niri restore fixture")
+                    return
+                }
+
+                var tokensByTitle: [String: WindowToken] = [:]
+                for (windowId, title) in titlesByInitialWindowId {
+                    let token = initialController.workspaceManager.addWindow(
+                        makeRefreshTestWindow(windowId: windowId),
+                        pid: getpid(),
+                        windowId: windowId,
+                        to: workspaceId,
+                        managedReplacementMetadata: makeRefreshReplacementMetadata(
+                            workspaceId: workspaceId,
+                            title: title,
+                            bundleId: bundleId
+                        )
+                    )
+                    initialController.workspaceManager.setCachedConstraints(.unconstrained, for: token)
+                    tokensByTitle[title] = token
+                }
+
+                let tokenA = try #require(tokensByTitle["Launch Restore A"])
+                let tokenB = try #require(tokensByTitle["Launch Restore B"])
+                let tokenC = try #require(tokensByTitle["Launch Restore C"])
+
+                let root = NiriRoot(workspaceId: workspaceId)
+                let firstColumn = NiriContainer()
+                firstColumn.width = .fixed(480)
+                firstColumn.cachedWidth = 480
+                let secondColumn = NiriContainer()
+                secondColumn.width = .fixed(720)
+                secondColumn.cachedWidth = 720
+                root.appendChild(firstColumn)
+                root.appendChild(secondColumn)
+                engine.roots[workspaceId] = root
+                engine.ensureMonitor(for: monitor.id, monitor: monitor).workspaceRoots[workspaceId] = root
+
+                for token in [tokenA, tokenB] {
+                    let window = NiriWindow(token: token)
+                    firstColumn.appendChild(window)
+                    engine.tokenToNode[token] = window
+                }
+                let windowC = NiriWindow(token: tokenC)
+                secondColumn.appendChild(windowC)
+                engine.tokenToNode[tokenC] = windowC
+
+                initialController.layoutRefreshController.requestRelayout(
+                    reason: .gapsChanged,
+                    affectedWorkspaceIds: [workspaceId]
+                )
+                await waitForSettledRefreshWork(on: initialController)
+
+                let persistedEntries = initialController.workspaceManager.persistedWindowRestoreCatalogForTests()
+                    .entries
+                #expect(persistedEntries.count == 3)
+                #expect(persistedEntries.allSatisfy { $0.restoreIntent.niriPlacement != nil })
+
+                initialController.workspaceManager.flushPersistedWindowRestoreCatalogNow()
+                initialSettings.flushNow()
+            }
+
+            let relaunchedSettings = SettingsStore(defaults: defaults)
+            let relaunchedController = makeRefreshTestController(
+                settings: relaunchedSettings,
+                workspaceConfigurations: workspaceConfigurations
+            )
+            defer { cleanupRefreshTestController(relaunchedController) }
+            relaunchedController.motionPolicy.animationsEnabled = false
+            relaunchedController.axEventHandler.windowFactsProvider = { axRef, _ in
+                makeRefreshTestWindowFacts(
+                    bundleId: bundleId,
+                    title: titlesByRelaunchedWindowId[axRef.windowId]
+                )
+            }
+            relaunchedController.axManager.currentWindowsAsyncOverride = {
+                titlesByRelaunchedWindowId.keys.sorted().map { windowId in
+                    (makeRefreshTestWindow(windowId: windowId), getpid(), windowId)
+                }
+            }
+            relaunchedController.enableNiriLayout(maxWindowsPerColumn: 2)
+            await waitForRefreshWork(on: relaunchedController)
+            let bootEntries = relaunchedController.workspaceManager.bootPersistedWindowRestoreCatalogForTests().entries
+            #expect(bootEntries.count == 3)
+            #expect(Set(bootEntries.compactMap(\.key.title)) == Set(titlesByInitialWindowId.values))
+
+            relaunchedController.layoutRefreshController.requestFullRescan(reason: .startup)
+            await waitForSettledRefreshWork(on: relaunchedController)
+
+            guard let restoredWorkspaceId = relaunchedController.workspaceManager.workspaceId(
+                for: "1",
+                createIfMissing: false
+            ),
+                  let engine = relaunchedController.niriEngine
+            else {
+                Issue.record("Missing relaunched Niri restore fixture")
+                return
+            }
+
+            let restoredTokenA = WindowToken(pid: getpid(), windowId: 6_201)
+            let restoredTokenB = WindowToken(pid: getpid(), windowId: 6_202)
+            let restoredTokenC = WindowToken(pid: getpid(), windowId: 6_203)
+            #expect(Set(relaunchedController.workspaceManager.allEntries().compactMap(\.managedReplacementMetadata?.bundleId)) == [bundleId])
+            #expect(Set(relaunchedController.workspaceManager.allEntries().compactMap(\.managedReplacementMetadata?.title)) == Set(titlesByRelaunchedWindowId.values))
+            #expect(relaunchedController.workspaceManager.consumedBootPersistedWindowRestoreEntryCountForTests() == 3)
+            #expect(workspaceManagerTokenSet(controller: relaunchedController, workspaceId: restoredWorkspaceId) == Set([
+                restoredTokenA,
+                restoredTokenB,
+                restoredTokenC
+            ]))
+            #expect(niriColumnTokenSnapshot(controller: relaunchedController, workspaceId: restoredWorkspaceId) == [
+                [restoredTokenA, restoredTokenB],
+                [restoredTokenC]
+            ])
+
+            let restoredColumns = engine.columns(in: restoredWorkspaceId)
+            #expect(restoredColumns.count == 2)
+            if restoredColumns.count == 2 {
+                #expect(abs(restoredColumns[0].cachedWidth - 480) < 0.5)
+                #expect(abs(restoredColumns[1].cachedWidth - 720) < 0.5)
+            }
+        }
     }
 
     @Test @MainActor func workspaceBarRefreshRequestsCoalesceOnNextMainTurn() async {

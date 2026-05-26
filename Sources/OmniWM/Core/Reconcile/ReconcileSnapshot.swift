@@ -109,6 +109,7 @@ struct RestoreIntent: Equatable {
     var normalizedFloatingOrigin: CGPoint?
     var restoreToFloating: Bool
     var rescueEligible: Bool
+    var niriPlacement: PersistedNiriPlacement? = nil
 }
 
 struct ReplacementCorrelation: Equatable {
