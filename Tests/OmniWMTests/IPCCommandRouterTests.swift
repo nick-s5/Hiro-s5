@@ -444,6 +444,53 @@ private func prepareIPCNiriState(
         #expect(result == .ignoredDisabled)
     }
 
+    @Test func focusCommandReturnsIgnoredOverviewWhenOverviewIsOpen() {
+        let controller = makeLayoutPlanTestController()
+        controller.motionPolicy.animationsEnabled = false
+        defer {
+            if controller.isOverviewOpen() {
+                controller.toggleOverview()
+            }
+            resetSharedControllerStateForTests()
+        }
+        controller.toggleOverview()
+        let router = makeIPCCommandRouter(for: controller)
+
+        let result = router.handle(
+            .focus(direction: .left)
+        )
+
+        #expect(controller.isOverviewOpen())
+        #expect(result == .ignoredOverview)
+    }
+
+    @Test func focusMonitorCommandsReturnIgnoredOverviewWhenOverviewIsOpen() {
+        let controller = makeLayoutPlanTestController()
+        controller.motionPolicy.animationsEnabled = false
+        defer {
+            if controller.isOverviewOpen() {
+                controller.toggleOverview()
+            }
+            resetSharedControllerStateForTests()
+        }
+        controller.toggleOverview()
+        let router = makeIPCCommandRouter(for: controller)
+
+        for command in [IPCCommandRequest.focusMonitorPrevious, .focusMonitorNext, .focusMonitorLast] {
+            #expect(router.handle(command) == .ignoredOverview)
+        }
+    }
+
+    @Test func focusMonitorCommandsReturnIgnoredDisabledWhenControllerIsDisabled() {
+        let controller = makeLayoutPlanTestController()
+        controller.isEnabled = false
+        let router = makeIPCCommandRouter(for: controller)
+
+        for command in [IPCCommandRequest.focusMonitorPrevious, .focusMonitorNext, .focusMonitorLast] {
+            #expect(router.handle(command) == .ignoredDisabled)
+        }
+    }
+
     @Test func setWorkspaceLayoutUpdatesActiveWorkspaceConfiguration() {
         let controller = makeLayoutPlanTestController()
         let router = makeIPCCommandRouter(for: controller)

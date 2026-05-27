@@ -216,7 +216,7 @@ final class WMController {
         focusPolicyEngine = FocusPolicyEngine()
         workspaceManager.updateAnimationClock(animationClock)
         hotkeys.onCommand = { [weak self] command in
-            self?.commandHandler.handleCommand(command)
+            self?.commandHandler.handleHotkeyCommand(command)
         }
         tabbedOverlayManager.onSelect = { [weak self] workspaceId, columnId, visualIndex in
             self?.layoutRefreshController.selectTabInNiri(
@@ -2470,6 +2470,10 @@ final class WMController {
         windowActionHandler.toggleOverview()
     }
 
+    func navigateOverviewSelection(_ direction: Direction) -> Bool {
+        windowActionHandler.navigateOverviewSelection(direction)
+    }
+
     func raiseAllFloatingWindows() {
         windowActionHandler.raiseAllFloatingWindows()
     }
@@ -2567,6 +2571,10 @@ final class WMController {
 
     func isOverviewOpen() -> Bool {
         windowActionHandler.isOverviewOpen()
+    }
+
+    func selectedOverviewWindowForTests() -> WindowHandle? {
+        windowActionHandler.selectedOverviewWindowForTests()
     }
 
     @discardableResult

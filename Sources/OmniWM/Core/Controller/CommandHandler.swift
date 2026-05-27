@@ -13,8 +13,21 @@ final class CommandHandler {
         self.controller = controller
     }
 
-    func handleCommand(_ command: HotkeyCommand) {
-        _ = performCommand(command)
+    @discardableResult
+    func handleHotkeyCommand(_ command: HotkeyCommand) -> ExternalCommandResult {
+        guard let controller else { return .notFound }
+        guard controller.isEnabled else { return .ignoredDisabled }
+        if case let .focus(direction) = command,
+           controller.navigateOverviewSelection(direction)
+        {
+            return .executed
+        }
+        return performCommand(command)
+    }
+
+    @discardableResult
+    func handleCommand(_ command: HotkeyCommand) -> ExternalCommandResult {
+        performCommand(command)
     }
 
     @discardableResult

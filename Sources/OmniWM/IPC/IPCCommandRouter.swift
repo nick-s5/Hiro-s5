@@ -302,7 +302,8 @@ final class IPCCommandRouter {
     private func focusMonitor(previous: Bool) -> ExternalCommandResult {
         let previousMonitorId = controller.workspaceManager.interactionMonitorId ?? controller.monitorForInteraction()?
             .id
-        _ = controller.commandHandler.performCommand(previous ? .focusMonitorPrevious : .focusMonitorNext)
+        let result = controller.commandHandler.performCommand(previous ? .focusMonitorPrevious : .focusMonitorNext)
+        guard result == .executed else { return result }
         let currentMonitorId = controller.workspaceManager.interactionMonitorId ?? controller.monitorForInteraction()?
             .id
         return currentMonitorId == previousMonitorId ? .notFound : .executed
@@ -311,7 +312,8 @@ final class IPCCommandRouter {
     private func focusLastMonitor() -> ExternalCommandResult {
         let previousMonitorId = controller.workspaceManager.interactionMonitorId ?? controller.monitorForInteraction()?
             .id
-        _ = controller.commandHandler.performCommand(.focusMonitorLast)
+        let result = controller.commandHandler.performCommand(.focusMonitorLast)
+        guard result == .executed else { return result }
         let currentMonitorId = controller.workspaceManager.interactionMonitorId ?? controller.monitorForInteraction()?
             .id
         return currentMonitorId == previousMonitorId ? .notFound : .executed

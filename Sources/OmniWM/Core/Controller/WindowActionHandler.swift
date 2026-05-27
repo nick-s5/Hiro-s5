@@ -108,12 +108,22 @@ final class WindowActionHandler {
         overviewController.toggle()
     }
 
+    func navigateOverviewSelection(_ direction: Direction) -> Bool {
+        guard overviewController.isOpen else { return false }
+        overviewController.navigateSelection(direction)
+        return true
+    }
+
     func isOverviewOpen() -> Bool {
         overviewController.isOpen
     }
 
     func isPointInOverview(_ point: CGPoint) -> Bool {
         overviewController.isPointInside(point)
+    }
+
+    func selectedOverviewWindowForTests() -> WindowHandle? {
+        overviewController.selectedWindowHandleForTests()
     }
 
     private func activateWindowFromOverview(handle: WindowHandle, workspaceId: WorkspaceDescriptor.ID) {

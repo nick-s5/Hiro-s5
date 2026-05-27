@@ -907,6 +907,12 @@ final class OverviewController {
     }
 }
 
+extension OverviewController {
+    func selectedWindowHandleForTests() -> WindowHandle? {
+        selectedWindowHandle
+    }
+}
+
 private extension OverviewController {
     struct DragSession {
         let handle: WindowHandle
