@@ -105,7 +105,7 @@ struct WorldView {
             for entry in workspaceManager.entries(in: workspace.id) {
                 guard entry.layoutReason == .nativeFullscreen,
                       workspaceManager.showsNativeFullscreenPlaceholder(for: entry.token),
-                      !workspaceManager.isHiddenInCorner(entry.windowId),
+                      !workspaceManager.isHiddenInCorner(entry.token),
                       let frame = placeholderFrame(for: entry.token),
                       frame.width > 1, frame.height > 1
                 else { continue }
