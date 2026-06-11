@@ -116,7 +116,6 @@ enum AnimationDirective {
     case startNiriScroll(workspaceId: WorkspaceDescriptor.ID)
     case startDwindleAnimation(workspaceId: WorkspaceDescriptor.ID, monitorId: Monitor.ID)
     case activateWindow(token: WindowToken)
-    case updateTabbedOverlays
 }
 
 struct RefreshVisibilityEffect: Equatable {}
@@ -124,7 +123,6 @@ struct RefreshVisibilityEffect: Equatable {}
 struct RefreshExecutionEffects {
     var visibility: RefreshVisibilityEffect?
     var requestWorkspaceBarRefresh: Bool = false
-    var updateTabbedOverlays: Bool = false
     var focusValidationWorkspaceIds: [WorkspaceDescriptor.ID] = []
     var focusValidationPreferredTokens: [WorkspaceDescriptor.ID: WindowToken] = [:]
     var markInitialRefreshComplete: Bool = false

@@ -2415,7 +2415,6 @@ final class AXEventHandler {
         }
 
         controller.surfaceReconciler.noteRestackOccurred()
-        controller.niriLayoutHandler.updateTabbedColumnOverlays(forceOrdering: true)
         if shouldActivateWorkspace, shouldConfirmRequest {
             controller.syncMonitorsToNiriEngine()
             controller.layoutRefreshController.commitWorkspaceTransition(
@@ -2703,7 +2702,7 @@ final class AXEventHandler {
         AXWindowService.invalidateCachedTitles(windowIds: [UInt32(oldToken.windowId), windowId])
         subscribeToWindows([windowId])
         controller.requestWorkspaceBarRefresh()
-        controller.niriLayoutHandler.updateTabbedColumnOverlays(forceOrdering: true)
+        controller.surfaceReconciler.noteRestackOccurred()
 
         Task { @MainActor [weak self] in
             guard let self, let controller = self.controller else { return }

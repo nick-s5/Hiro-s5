@@ -9,6 +9,7 @@ struct DesiredBorderSurface: Equatable {
 
 struct DesiredSurfaceScene: Equatable {
     var border: DesiredBorderSurface?
+    var tabRails: [TabbedColumnOverlayInfo] = []
 
     static let empty = DesiredSurfaceScene()
 }
@@ -17,7 +18,10 @@ enum SurfaceDerivation {
     @MainActor
     static func derive(world: WorldView) -> DesiredSurfaceScene {
         guard world.hasStartedServices else { return .empty }
-        return DesiredSurfaceScene(border: deriveBorder(world: world))
+        return DesiredSurfaceScene(
+            border: deriveBorder(world: world),
+            tabRails: world.tabRailInfos()
+        )
     }
 
     @MainActor
@@ -86,7 +90,7 @@ final class SurfaceReconciler {
         forceOrderingOnNextReconcile = false
         guard let controller else { return }
         let desired = SurfaceDerivation.derive(world: WorldView(controller: controller))
-        apply(desired, forceOrdering: forceOrdering)
+        apply(desired, on: controller, forceOrdering: forceOrdering)
     }
 
     func cleanup() {
@@ -99,9 +103,16 @@ final class SurfaceReconciler {
         reconcileNow()
     }
 
-    private func apply(_ desired: DesiredSurfaceScene, forceOrdering: Bool) {
+    private func apply(
+        _ desired: DesiredSurfaceScene,
+        on controller: WMController,
+        forceOrdering: Bool
+    ) {
         guard desired != appliedScene || forceOrdering else { return }
         borderApplier.apply(desired.border, forceOrdering: forceOrdering)
+        if desired.tabRails != appliedScene.tabRails || forceOrdering {
+            controller.tabbedOverlayManager.updateOverlays(desired.tabRails, forceOrdering: forceOrdering)
+        }
         appliedScene = desired
     }
 }

@@ -116,8 +116,6 @@ enum NiriWindowMoveResult {
             )
             return
         }
-        updateTabbedColumnOverlays(workspaceId: wsId, monitor: monitor)
-
         let animationsOngoing = viewportAnimationRunning
             || windowAnimationsRunning
             || columnAnimationsRunning
@@ -998,12 +996,8 @@ enum NiriWindowMoveResult {
         return selectedWindow.token
     }
 
-    func updateTabbedColumnOverlays(forceOrdering: Bool = false) {
-        guard let controller else { return }
-        guard let engine = controller.niriEngine else {
-            controller.tabbedOverlayManager.removeAll()
-            return
-        }
+    func desiredTabRailInfos() -> [TabbedColumnOverlayInfo] {
+        guard let controller, let engine = controller.niriEngine else { return [] }
 
         var infos: [TabbedColumnOverlayInfo] = []
         for monitor in controller.workspaceManager.monitors {
@@ -1016,18 +1010,7 @@ enum NiriWindowMoveResult {
                 monitor: monitor
             ))
         }
-
-        controller.tabbedOverlayManager.updateOverlays(infos, forceOrdering: forceOrdering)
-    }
-
-    func updateTabbedColumnOverlays(
-        workspaceId: WorkspaceDescriptor.ID,
-        monitor: Monitor,
-        forceOrdering: Bool = false
-    ) {
-        guard let controller, let engine = controller.niriEngine else { return }
-        let infos = tabbedColumnOverlayInfos(engine: engine, workspaceId: workspaceId, monitor: monitor)
-        controller.tabbedOverlayManager.updateOverlays(infos, in: workspaceId, forceOrdering: forceOrdering)
+        return infos
     }
 
     private func tabbedColumnOverlayInfos(

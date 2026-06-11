@@ -302,27 +302,6 @@ final class TabbedColumnOverlayManager {
         }
     }
 
-    func updateOverlays(
-        _ infos: [TabbedColumnOverlayInfo],
-        in workspaceId: WorkspaceDescriptor.ID,
-        forceOrdering: Bool = false
-    ) {
-        var desiredKeys = Set<TabbedColumnOverlayKey>()
-        desiredKeys.reserveCapacity(infos.count)
-        for info in infos where info.tabCount > 0 {
-            desiredKeys.insert(info.key)
-        }
-
-        for (key, overlay) in overlays where key.workspaceId == workspaceId && !desiredKeys.contains(key) {
-            overlay.close()
-            overlays.removeValue(forKey: key)
-        }
-
-        for info in infos where info.tabCount > 0 {
-            updateOverlay(info, forceOrdering: forceOrdering)
-        }
-    }
-
     private func updateOverlay(_ info: TabbedColumnOverlayInfo, forceOrdering: Bool) {
         let key = info.key
         let overlay = overlays[key] ?? {

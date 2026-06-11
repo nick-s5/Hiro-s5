@@ -64,6 +64,10 @@ struct WorldView {
         controller.workspaceManager.visibleWorkspaceIds().contains(workspaceId)
     }
 
+    func tabRailInfos() -> [TabbedColumnOverlayInfo] {
+        controller.niriLayoutHandler.desiredTabRailInfos()
+    }
+
     func borderFrame(forWindowId windowId: Int) -> CGRect? {
         if let pending = controller.axManager.pendingFrameWrite(for: windowId) {
             return pending

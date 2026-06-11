@@ -621,10 +621,6 @@ import QuartzCore
             postLayoutAction.runIfCurrent(using: controller.workspaceManager)
         }
 
-        if plan.effects.updateTabbedOverlays {
-            niriHandler.updateTabbedColumnOverlays(forceOrdering: true)
-        }
-
         if plan.effects.requestWorkspaceBarRefresh {
             controller.requestWorkspaceBarRefresh()
         }
@@ -813,8 +809,6 @@ import QuartzCore
                     )
                 }
                 controller.focusWindow(token)
-            case .updateTabbedOverlays:
-                niriHandler.updateTabbedColumnOverlays(forceOrdering: true)
             }
         }
     }
@@ -1157,10 +1151,6 @@ import QuartzCore
         return await executeRefreshExecutionPlan(plan, generation: generation)
     }
 
-    func updateTabbedColumnOverlays() {
-        niriHandler.updateTabbedColumnOverlays()
-    }
-
     func selectTabInNiri(
         info: TabbedColumnOverlayInfo,
         visualIndex: Int,
@@ -1180,14 +1170,12 @@ import QuartzCore
 
         if refresh.kind != .visibilityRefresh, refresh.needsVisibilityReconciliation {
             plan.effects.requestWorkspaceBarRefresh = true
-            plan.effects.updateTabbedOverlays = true
         }
     }
 
     private func buildVisibilityExecutionPlan() -> RefreshExecutionPlan {
         var effects = RefreshExecutionEffects()
         effects.requestWorkspaceBarRefresh = true
-        effects.updateTabbedOverlays = true
         return RefreshExecutionPlan(effects: effects)
     }
 
@@ -1209,8 +1197,6 @@ import QuartzCore
         var workspacePlans: [WorkspaceLayoutPlan] = []
         workspacePlans.reserveCapacity(niriWorkspaces.count + dwindleWorkspaces.count)
 
-        var updateTabbedOverlays = false
-
         if !niriWorkspaces.isEmpty {
             try Task.checkCancellation()
             let plans = try await niriHandler.layoutWithNiriEngine(
@@ -1219,7 +1205,6 @@ import QuartzCore
             )
             try Task.checkCancellation()
             workspacePlans.append(contentsOf: plans)
-            updateTabbedOverlays = !plans.isEmpty
         }
 
         if !dwindleWorkspaces.isEmpty {
@@ -1232,7 +1217,6 @@ import QuartzCore
         var effects = RefreshExecutionEffects()
         effects.visibility = .init()
         effects.requestWorkspaceBarRefresh = true
-        effects.updateTabbedOverlays = updateTabbedOverlays
         if recoverFocus,
            !controller.workspaceManager.isAppFullscreenActive,
            !controller.workspaceManager.hasPendingNativeFullscreenTransition,
@@ -1283,7 +1267,6 @@ import QuartzCore
 
         var workspacePlans: [WorkspaceLayoutPlan] = []
         workspacePlans.reserveCapacity(dwindleWorkspaces.count + niriRemovalSeeds.count)
-        var updateTabbedOverlays = false
 
         if !niriRemovalSeeds.isEmpty {
             try Task.checkCancellation()
@@ -1294,7 +1277,6 @@ import QuartzCore
             )
             try Task.checkCancellation()
             workspacePlans.append(contentsOf: plans)
-            updateTabbedOverlays = !plans.isEmpty
         }
 
         if !dwindleWorkspaces.isEmpty {
@@ -1332,7 +1314,6 @@ import QuartzCore
         var effects = RefreshExecutionEffects()
         effects.visibility = .init()
         effects.requestWorkspaceBarRefresh = true
-        effects.updateTabbedOverlays = updateTabbedOverlays
         effects.focusValidationWorkspaceIds = focusValidationWorkspaceIds
         effects.focusValidationPreferredTokens = focusValidationPreferredTokens
 
@@ -1646,8 +1627,6 @@ import QuartzCore
         var workspacePlans: [WorkspaceLayoutPlan] = []
         workspacePlans.reserveCapacity(niriWorkspaces.count + dwindleWorkspaces.count)
 
-        var updateTabbedOverlays = false
-
         if !niriWorkspaces.isEmpty {
             try Task.checkCancellation()
             let plans = try await niriHandler.layoutWithNiriEngine(
@@ -1656,7 +1635,6 @@ import QuartzCore
             )
             try Task.checkCancellation()
             workspacePlans.append(contentsOf: plans)
-            updateTabbedOverlays = !plans.isEmpty
         }
 
         if !dwindleWorkspaces.isEmpty {
@@ -1669,7 +1647,6 @@ import QuartzCore
         var effects = RefreshExecutionEffects()
         effects.visibility = .init()
         effects.requestWorkspaceBarRefresh = true
-        effects.updateTabbedOverlays = updateTabbedOverlays
         if !controller.workspaceManager.isAppFullscreenActive,
            !controller.workspaceManager.hasPendingNativeFullscreenTransition,
            !controller.shouldSuppressManagedFocusRecovery,
@@ -2111,9 +2088,6 @@ import QuartzCore
                 let shouldRequestWorkspaceBarRefresh =
                     completedRefresh.kind != .visibilityRefresh && completedRefresh.needsVisibilityReconciliation
 
-                if completedRefresh.kind != .visibilityRefresh, completedRefresh.needsVisibilityReconciliation {
-                    performVisibilitySideEffects(on: controller)
-                }
                 for postLayoutAction in completedRefresh.postLayoutActions {
                     postLayoutAction.runIfCurrent(using: controller.workspaceManager)
                 }
@@ -2251,10 +2225,6 @@ import QuartzCore
         )
 
         layoutState.pendingRefresh = pendingRefresh
-    }
-
-    private func performVisibilitySideEffects(on controller: WMController) {
-        controller.niriLayoutHandler.updateTabbedColumnOverlays(forceOrdering: true)
     }
 
     func backingScale(for monitor: Monitor) -> CGFloat {
