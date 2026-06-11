@@ -181,7 +181,9 @@ struct HotkeySettingsView: View {
                                     .frame(minWidth: 112, alignment: .center)
                             }
                             .buttonStyle(.bordered)
-                            .help("Change OmniWM modifier. Current OmniWM modifier: \(settings.hyperTrigger.humanReadableString)")
+                            .help(
+                                "Change OmniWM modifier. Current OmniWM modifier: \(settings.hyperTrigger.humanReadableString)"
+                            )
                             .accessibilityLabel("Change OmniWM modifier")
                             .accessibilityValue(settings.hyperTrigger.humanReadableString)
                         }
@@ -196,7 +198,9 @@ struct HotkeySettingsView: View {
                             controller.updateHotkeyBindings(settings.hotkeyBindings)
                         }
                     }
-                    SettingsCaption("How long to hold the Hyper key before it activates. 0 ms = immediate (no tap-through to native key).")
+                    SettingsCaption(
+                        "How long to hold the Hyper key before it activates. 0 ms = immediate (no tap-through to native key)."
+                    )
                 }
 
                 LabeledContent("Input Monitoring") {
@@ -339,7 +343,10 @@ struct HotkeySettingsView: View {
     }
 
     private func handleChordCaptured(actionId: String, newBinding: KeyBinding) {
-        handleTriggerCaptured(actionId: actionId, newTrigger: newBinding.isUnassigned ? .unassigned : .chord(newBinding))
+        handleTriggerCaptured(
+            actionId: actionId,
+            newTrigger: newBinding.isUnassigned ? .unassigned : .chord(newBinding)
+        )
     }
 
     private func handleHyperTriggerCaptured(_ newTrigger: HyperKeyTrigger) {

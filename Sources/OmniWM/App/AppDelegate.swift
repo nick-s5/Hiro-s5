@@ -40,7 +40,7 @@ public final class AppBootstrapState {
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     public nonisolated(unsafe) weak static var sharedBootstrap: AppBootstrapState?
 
-    public override init() {
+    override public init() {
         super.init()
     }
 

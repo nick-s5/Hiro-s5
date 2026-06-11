@@ -681,8 +681,10 @@ final class SettingsStore {
 
         quakeTerminalEnabled = export.quakeTerminalEnabled
         quakeTerminalPosition = QuakeTerminalPosition(rawValue: export.quakeTerminalPosition) ?? .center
-        quakeTerminalWidthPercent = QuakeTerminalGeometryPolicy.normalizedDimensionPercent(export.quakeTerminalWidthPercent)
-        quakeTerminalHeightPercent = QuakeTerminalGeometryPolicy.normalizedDimensionPercent(export.quakeTerminalHeightPercent)
+        quakeTerminalWidthPercent = QuakeTerminalGeometryPolicy
+            .normalizedDimensionPercent(export.quakeTerminalWidthPercent)
+        quakeTerminalHeightPercent = QuakeTerminalGeometryPolicy
+            .normalizedDimensionPercent(export.quakeTerminalHeightPercent)
         quakeTerminalAnimationDuration = export.quakeTerminalAnimationDuration
         quakeTerminalAutoHide = export.quakeTerminalAutoHide
         quakeTerminalOpacity = export.quakeTerminalOpacity ?? baseline.quakeTerminalOpacity ?? 1.0

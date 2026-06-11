@@ -166,7 +166,6 @@ final class QuakeSplitContainer: NSView {
         root = root.updatingRatio(at: info.address, newRatio: newRatio)
         relayout()
     }
-
 }
 
 @MainActor
