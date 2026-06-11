@@ -246,12 +246,6 @@ final class AXEventHandler {
         let expiresAt: Date
     }
 
-    private struct SameAppCloseProbe {
-        let focusedToken: WindowToken
-        let observedToken: WindowToken
-        let task: Task<Void, Never>
-    }
-
     private struct RecentMouseFocusIntent {
         let token: WindowToken
         let expiresAt: Date
@@ -365,7 +359,6 @@ final class AXEventHandler {
     private var pendingCreatedWindowRetryTasks: [UInt32: Task<Void, Never>] = [:]
     private var createdWindowRetryCountById: [UInt32: Int] = [:]
     private var windowCloseFocusRecoveryContext: WindowCloseFocusRecoveryContext?
-    private var pendingSameAppCloseProbe: SameAppCloseProbe?
     private var recentMouseFocusIntent: RecentMouseFocusIntent?
     private var createFocusTrace: [NiriCreateFocusTraceEvent] = []
     private var managedReplacementTrace: [ManagedReplacementTraceEvent] = []
@@ -1645,60 +1638,54 @@ final class AXEventHandler {
         observedToken: WindowToken,
         source: ActivationEventSource
     ) {
-        if pendingSameAppCloseProbe?.focusedToken == focusedToken,
-           pendingSameAppCloseProbe?.observedToken == observedToken
+        guard let controller else { return }
+        if let open = controller.intentLedger.openSameAppCloseProbe(),
+           open.payload.focusedToken == focusedToken,
+           open.payload.observedToken == observedToken
         {
             return
         }
 
         cancelSameAppCloseProbe()
-        let task = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: Self.sameAppCloseProbeDelay)
-            } catch {
-                return
-            }
-            guard let self, let controller = self.controller else {
-                return
-            }
-            guard let probe = self.pendingSameAppCloseProbe,
-                  probe.focusedToken == focusedToken,
-                  probe.observedToken == observedToken
-            else {
-                return
-            }
-
-            guard controller.workspaceManager.focusedToken == focusedToken,
-                  controller.workspaceManager.entry(for: focusedToken) != nil,
-                  controller.intentLedger.activeManagedRequest == nil
-            else {
-                return
-            }
-
-            self.pendingSameAppCloseProbe = nil
-            self.handleAppActivation(
-                pid: observedToken.pid,
-                source: source,
-                origin: .probe
+        let intent = controller.intentLedger.registerSameAppCloseProbe(
+            SameAppCloseProbePayload(
+                focusedToken: focusedToken,
+                observedToken: observedToken,
+                source: source
             )
+        )
+        controller.deadlineWheel.schedule(intentId: intent.id, after: Self.sameAppCloseProbeDelay)
+    }
+
+    private func handleSameAppCloseProbeDeadline(_ payload: SameAppCloseProbePayload) {
+        guard let controller else { return }
+        guard controller.workspaceManager.focusedToken == payload.focusedToken,
+              controller.workspaceManager.entry(for: payload.focusedToken) != nil,
+              controller.intentLedger.activeManagedRequest == nil
+        else {
+            return
         }
-        pendingSameAppCloseProbe = SameAppCloseProbe(
-            focusedToken: focusedToken,
-            observedToken: observedToken,
-            task: task
+        handleAppActivation(
+            pid: payload.observedToken.pid,
+            source: payload.source,
+            origin: .probe
         )
     }
 
     private func cancelSameAppCloseProbe(
         matchingFocusedToken token: WindowToken? = nil,
-        reason: String = "cancel"
+        reason _: String = "cancel"
     ) {
-        guard let probe = pendingSameAppCloseProbe else { return }
-        if let token, probe.focusedToken != token {
+        guard let controller,
+              let open = controller.intentLedger.openSameAppCloseProbe()
+        else {
             return
         }
-        probe.task.cancel()
-        pendingSameAppCloseProbe = nil
+        if let token, open.payload.focusedToken != token {
+            return
+        }
+        _ = controller.intentLedger.cancel(id: open.intent.id)
+        controller.deadlineWheel.cancel(intentId: open.intent.id)
     }
 
     func noteMouseFocusIntent(token: WindowToken) {
@@ -1714,7 +1701,9 @@ final class AXEventHandler {
                 reason: "mouse_focus_intent"
             )
         }
-        if pendingSameAppCloseProbe?.observedToken == token {
+        if let open = controller?.intentLedger.openSameAppCloseProbe(),
+           open.payload.observedToken == token
+        {
             cancelSameAppCloseProbe(reason: "mouse_focus_intent")
         }
     }
@@ -1801,6 +1790,10 @@ final class AXEventHandler {
         case .activateApp,
              .replacementFocus:
             _ = controller.intentLedger.markExpired(id: intentId)
+
+        case let .sameAppCloseProbe(payload):
+            _ = controller.intentLedger.markExpired(id: intentId)
+            handleSameAppCloseProbeDeadline(payload)
 
         case .focusWindow:
             guard let liveRequest = controller.intentLedger.activeManagedRequest(requestId: intentId) else {

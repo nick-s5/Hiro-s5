@@ -29,15 +29,23 @@ struct ReplacementFocusPayload: Equatable, Sendable {
     }
 }
 
+struct SameAppCloseProbePayload: Equatable, Sendable {
+    let focusedToken: WindowToken
+    let observedToken: WindowToken
+    let source: ActivationEventSource
+}
+
 enum IntentKind: Equatable, Sendable {
     case activateApp(pid: pid_t)
     case focusWindow(token: WindowToken, workspaceId: WorkspaceDescriptor.ID)
     case replacementFocus(ReplacementFocusPayload)
+    case sameAppCloseProbe(SameAppCloseProbePayload)
 
     var focusTargetToken: WindowToken? {
         switch self {
         case .activateApp,
-             .replacementFocus:
+             .replacementFocus,
+             .sameAppCloseProbe:
             nil
         case let .focusWindow(token, _):
             token
@@ -59,6 +67,8 @@ enum IntentKind: Equatable, Sendable {
             token.pid
         case let .replacementFocus(payload):
             payload.pid
+        case let .sameAppCloseProbe(payload):
+            payload.observedToken.pid
         }
     }
 }
@@ -292,6 +302,20 @@ final class IntentLedger {
         }
         mutate(&payload)
         entries[index].kind = .replacementFocus(payload)
+    }
+
+    @discardableResult
+    func registerSameAppCloseProbe(_ payload: SameAppCloseProbePayload) -> Intent {
+        append(kind: .sameAppCloseProbe(payload), origin: .keyboardOrProgrammatic)
+    }
+
+    func openSameAppCloseProbe() -> (intent: Intent, payload: SameAppCloseProbePayload)? {
+        let open = entries.last { entry in
+            guard entry.phase == .pending, case .sameAppCloseProbe = entry.kind else { return false }
+            return true
+        }
+        guard let open, case let .sameAppCloseProbe(payload) = open.kind else { return nil }
+        return (open, payload)
     }
 
     func intent(id: IntentID) -> Intent? {
