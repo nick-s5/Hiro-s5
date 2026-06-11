@@ -1635,7 +1635,7 @@ import QuartzCore
         }
 
         let scratchpadTokenBeforeRemove = controller.workspaceManager.scratchpadToken()
-        let removedEntries = controller.workspaceManager.removeMissing(keys: seenKeys, requiredConsecutiveMisses: 1)
+        let removedEntries = controller.workspaceManager.removeMissing(keys: seenKeys, requiredConsecutiveMisses: 2)
         for entry in removedEntries {
             controller.nativeFullscreenPlaceholderManager.remove(entry.token)
             controller.axManager.removeWindowState(pid: entry.pid, windowId: entry.windowId)
