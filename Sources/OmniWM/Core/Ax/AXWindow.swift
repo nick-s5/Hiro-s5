@@ -93,6 +93,7 @@ struct AXFrameApplicationRequest: Equatable, Sendable {
     let windowId: Int
     let frame: CGRect
     let currentFrameHint: CGRect?
+    var verify = true
 }
 
 struct AXFrameApplyResult: Equatable, Sendable {
@@ -332,7 +333,8 @@ enum AXWindowService {
     static func setFrame(
         _ window: AXWindowRef,
         frame: CGRect,
-        currentFrameHint: CGRect? = nil
+        currentFrameHint: CGRect? = nil,
+        verify: Bool = true
     ) -> AXFrameWriteResult {
         let writeOrder = frameWriteOrder(
             currentFrame: currentFrameHint ?? (try? self.frame(window)),
@@ -370,12 +372,14 @@ enum AXWindowService {
             sizeError = AXUIElementSetAttributeValue(window.element, kAXSizeAttribute as CFString, sizeValue)
         }
 
-        let observedFrame = try? self.frame(window)
+        let observedFrame = verify ? (try? self.frame(window)) : nil
 
         let failureReason: AXFrameWriteFailureReason? = if sizeError != .success {
             mapFrameWriteFailure(sizeError, attribute: .size)
         } else if positionError != .success {
             mapFrameWriteFailure(positionError, attribute: .position)
+        } else if !verify {
+            nil
         } else if let observedFrame {
             observedFrame
                 .approximatelyEqual(to: frame, tolerance: FrameTolerance.frameWrite) ? nil : .verificationMismatch

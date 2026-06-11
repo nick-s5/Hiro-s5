@@ -51,6 +51,7 @@ final class AXFrameApplicationLedger {
     }
 
     private var lastAppliedFrames: [Int: CGRect] = [:]
+    private var assumedAppliedWindowIds: Set<Int> = []
     private var pendingFrameWrites: [Int: CGRect] = [:]
     private var recentFrameWriteFailures: [Int: AXFrameWriteFailureReason] = [:]
     private var retryBudgetByWindowId: [Int: Int] = [:]
@@ -107,6 +108,10 @@ final class AXFrameApplicationLedger {
             lastAppliedFrames[newWindowId] = frame
         }
 
+        if assumedAppliedWindowIds.remove(oldWindowId) != nil {
+            assumedAppliedWindowIds.insert(newWindowId)
+        }
+
         if let frame = pendingFrameWrites.removeValue(forKey: oldWindowId) {
             pendingFrameWrites[newWindowId] = frame
         }
@@ -139,6 +144,7 @@ final class AXFrameApplicationLedger {
 
     func confirmFrameWrite(for windowId: Int, frame: CGRect) {
         lastAppliedFrames[windowId] = frame
+        assumedAppliedWindowIds.remove(windowId)
         recentFrameWriteFailures.removeValue(forKey: windowId)
         retryBudgetByWindowId.removeValue(forKey: windowId)
         clearSettledRekeyMappings(to: windowId)
@@ -147,6 +153,7 @@ final class AXFrameApplicationLedger {
     func removeWindowState(windowId: Int) -> [AXFrameTerminalDelivery] {
         let deliveries = cancelObserver(for: windowId)
         lastAppliedFrames.removeValue(forKey: windowId)
+        assumedAppliedWindowIds.remove(windowId)
         pendingFrameWrites.removeValue(forKey: windowId)
         pendingFrameRequestIdByWindowId.removeValue(forKey: windowId)
         recentFrameWriteFailures.removeValue(forKey: windowId)
@@ -170,6 +177,7 @@ final class AXFrameApplicationLedger {
     func suppressFrameWrite(windowId: Int) -> [AXFrameTerminalDelivery] {
         let deliveries = cancelObserver(for: windowId)
         lastAppliedFrames.removeValue(forKey: windowId)
+        assumedAppliedWindowIds.remove(windowId)
         pendingFrameWrites.removeValue(forKey: windowId)
         pendingFrameRequestIdByWindowId.removeValue(forKey: windowId)
         recentFrameWriteFailures.removeValue(forKey: windowId)
@@ -184,12 +192,14 @@ final class AXFrameApplicationLedger {
         windowId: Int,
         frame: CGRect,
         isRetry: Bool,
+        verify: Bool = true,
         terminalObserver: AXFrameApplicationTerminalObserver?
     ) -> AXFrameEnqueueDecision {
         let cachedFrame = lastAppliedFrames[windowId]
         let pendingFrame = pendingFrameWrites[windowId]
         let hasRecentFailure = recentFrameWriteFailures[windowId] != nil
         let shouldForceApply = forceApplyWindowIds.remove(windowId) != nil
+        let shouldReverifyAssumedFrame = verify && assumedAppliedWindowIds.contains(windowId)
         if !shouldForceApply {
             if let pendingFrame,
                pendingFrame.approximatelyEqual(to: frame, tolerance: FrameTolerance.frameWrite)
@@ -209,7 +219,8 @@ final class AXFrameApplicationLedger {
                 }
             } else if let cached = cachedFrame,
                       cached.approximatelyEqual(to: frame, tolerance: FrameTolerance.frameWrite),
-                      !hasRecentFailure
+                      !hasRecentFailure,
+                      !shouldReverifyAssumedFrame
             {
                 if let terminalObserver {
                     return AXFrameEnqueueDecision(
@@ -276,7 +287,8 @@ final class AXFrameApplicationLedger {
                 pid: pid,
                 windowId: windowId,
                 frame: frame,
-                currentFrameHint: cachedFrame
+                currentFrameHint: cachedFrame,
+                verify: verify
             ),
             deliveries: deliveries,
             shouldCancelPendingRetry: !isRetry
@@ -301,6 +313,11 @@ final class AXFrameApplicationLedger {
 
             if let confirmedFrame = resolvedResult.confirmedFrame {
                 lastAppliedFrames[resolvedWindowId] = confirmedFrame
+                if resolvedResult.writeResult.observedFrame == nil {
+                    assumedAppliedWindowIds.insert(resolvedWindowId)
+                } else {
+                    assumedAppliedWindowIds.remove(resolvedWindowId)
+                }
                 recentFrameWriteFailures.removeValue(forKey: resolvedWindowId)
                 retryBudgetByWindowId.removeValue(forKey: resolvedWindowId)
                 outcome.deliveries.append(contentsOf: notifyPendingFrameObserver(with: resolvedResult))

@@ -3667,7 +3667,7 @@ final class LayoutDiffExecutor {
         }
 
         if !frameUpdates.isEmpty {
-            controller.axManager.applyFramesParallel(frameUpdates)
+            controller.axManager.applyFramesParallel(frameUpdates, verify: !plan.isAnimationTick)
         }
 
         if !revealFrameUpdates.isEmpty {

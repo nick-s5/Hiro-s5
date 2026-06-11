@@ -147,6 +147,7 @@ struct WorkspaceLayoutPlan {
     var diff: WorkspaceLayoutDiff
     var niriRestorePlacements: [WindowToken: PersistedNiriPlacement] = [:]
     var animationDirectives: [AnimationDirective] = []
+    var isAnimationTick = false
 }
 
 struct RefreshPostLayoutAction {

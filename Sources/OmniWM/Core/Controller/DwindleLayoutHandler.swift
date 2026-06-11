@@ -91,6 +91,20 @@ import QuartzCore
         }
 
         if !engine.hasActiveAnimations(in: wsId, at: targetTime) {
+            if let settleSnapshot = makeWorkspaceSnapshot(
+                workspaceId: wsId,
+                monitor: monitor,
+                resolveConstraints: false,
+                isActiveWorkspace: true
+            ) {
+                var settlePlan = buildAnimationPlan(
+                    snapshot: settleSnapshot,
+                    engine: engine,
+                    targetTime: targetTime
+                )
+                settlePlan.isAnimationTick = false
+                _ = controller.layoutRefreshController.executeLayoutPlan(settlePlan)
+            }
             controller.layoutRefreshController.stopDwindleAnimation(for: displayId)
             if let focusedFrame = plan.diff.focusedFrame {
                 _ = controller.reapplyKeyboardFocusBorderIfMatching(
@@ -474,7 +488,8 @@ import QuartzCore
                 workspaceId: snapshot.workspaceId,
                 runtimeRevision: snapshot.runtimeRevision
             ),
-            diff: diff
+            diff: diff,
+            isAnimationTick: true
         )
     }
 

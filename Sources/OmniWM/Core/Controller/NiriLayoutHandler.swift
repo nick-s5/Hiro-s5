@@ -123,6 +123,12 @@ enum NiriWindowMoveResult {
             || columnAnimationsRunning
 
         if !animationsOngoing {
+            applyFramesOnDemand(
+                wsId: wsId,
+                state: controller.workspaceManager.niriViewportState(for: wsId),
+                engine: engine,
+                monitor: monitor
+            )
             finalizeAnimation()
             var activeIds = Set<WorkspaceDescriptor.ID>()
             for mon in controller.workspaceManager.monitors {
@@ -379,7 +385,8 @@ enum NiriWindowMoveResult {
                 viewportState: animationTime == nil ? nil : snapshot.viewportState,
                 runtimeRevision: snapshot.runtimeRevision
             ),
-            diff: diff
+            diff: diff,
+            isAnimationTick: animationTime != nil
         )
     }
 

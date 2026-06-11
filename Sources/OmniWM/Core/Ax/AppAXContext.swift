@@ -66,6 +66,7 @@ private struct AppAXFrameWriteRequest: Sendable {
     let frame: CGRect
     let currentFrameHint: CGRect?
     let generation: Int
+    let verify: Bool
 }
 
 private final class AppAXContextCreationState: @unchecked Sendable {
@@ -548,7 +549,8 @@ final class AppAXContext {
                 windowId: $0.windowId,
                 frame: $0.frame,
                 currentFrameHint: $0.currentFrameHint,
-                generation: frameWriteGenerations.nextGeneration(for: $0.windowId)
+                generation: frameWriteGenerations.nextGeneration(for: $0.windowId),
+                verify: $0.verify
             )
         }
         let suppression = suppressedFrameWindowIds
@@ -710,7 +712,8 @@ private func applyFrameWriteRequest(
         let initialResult = AXWindowService.setFrame(
             axRef,
             frame: targetFrame,
-            currentFrameHint: currentFrameHint
+            currentFrameHint: currentFrameHint,
+            verify: request.verify
         )
         guard generations.isCurrent(request.generation, for: windowId) else {
             return cancelledFrameApplyResult(for: request)
@@ -726,7 +729,8 @@ private func applyFrameWriteRequest(
             let retryResult = AXWindowService.setFrame(
                 refreshedAXRef,
                 frame: targetFrame,
-                currentFrameHint: currentFrameHint
+                currentFrameHint: currentFrameHint,
+                verify: request.verify
             )
             guard generations.isCurrent(request.generation, for: windowId) else {
                 return cancelledFrameApplyResult(for: request)
@@ -760,7 +764,8 @@ private func applyFrameWriteRequest(
         let refreshedResult = AXWindowService.setFrame(
             refreshedAXRef,
             frame: targetFrame,
-            currentFrameHint: currentFrameHint
+            currentFrameHint: currentFrameHint,
+            verify: request.verify
         )
         guard generations.isCurrent(request.generation, for: windowId) else {
             return cancelledFrameApplyResult(for: request)

@@ -276,14 +276,16 @@ final class AXManager {
 
     func applyFramesParallel(
         _ frames: [(pid: pid_t, windowId: Int, frame: CGRect)],
-        terminalObserver: FrameApplicationTerminalObserver? = nil
+        terminalObserver: FrameApplicationTerminalObserver? = nil,
+        verify: Bool = true
     ) {
-        enqueueFrameApplications(frames, isRetry: false, terminalObserver: terminalObserver)
+        enqueueFrameApplications(frames, isRetry: false, verify: verify, terminalObserver: terminalObserver)
     }
 
     private func enqueueFrameApplications(
         _ frames: [(pid: pid_t, windowId: Int, frame: CGRect)],
         isRetry: Bool,
+        verify: Bool = true,
         terminalObserver: FrameApplicationTerminalObserver? = nil
     ) {
         if frameApplicationBufferInUse {
@@ -292,6 +294,7 @@ final class AXManager {
             enqueueFrameApplicationsUsingBuffer(
                 frames,
                 isRetry: isRetry,
+                verify: verify,
                 terminalObserver: terminalObserver,
                 framesByPid: &framesByPid
             )
@@ -309,6 +312,7 @@ final class AXManager {
         enqueueFrameApplicationsUsingBuffer(
             frames,
             isRetry: isRetry,
+            verify: verify,
             terminalObserver: terminalObserver,
             framesByPid: &framesByPidBuffer
         )
@@ -317,6 +321,7 @@ final class AXManager {
     private func enqueueFrameApplicationsUsingBuffer(
         _ frames: [(pid: pid_t, windowId: Int, frame: CGRect)],
         isRetry: Bool,
+        verify: Bool,
         terminalObserver: FrameApplicationTerminalObserver?,
         framesByPid: inout [pid_t: [AXFrameApplicationRequest]]
     ) {
@@ -332,6 +337,7 @@ final class AXManager {
                 windowId: windowId,
                 frame: frame,
                 isRetry: isRetry,
+                verify: verify,
                 terminalObserver: terminalObserver
             )
             if decision.shouldCancelPendingRetry {
