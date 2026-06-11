@@ -17,6 +17,7 @@ enum IntakeEvent: Sendable {
     case cgs(CGSWindowEvent)
     case display(DisplayConfigurationObserver.DisplayEvent)
     case hotkeyCommand(HotkeyCommand)
+    case intentExpired(intentId: IntentID)
     case ipcCommand(IPCCommandIntake)
     case mouseDragged(button: MouseEventHandler.MouseButton, location: CGPoint)
     case mouseMoved(location: CGPoint)
@@ -103,6 +104,10 @@ final class EventIntake {
 
     private nonisolated let buffer = OSAllocatedUnfairLock(initialState: Buffer())
     private weak var sink: EventIntakeSink?
+
+    nonisolated var lastSeq: UInt64 {
+        buffer.withLock { $0.nextSeq - 1 }
+    }
 
     @discardableResult
     nonisolated static func post(_ event: IntakeEvent) -> Bool {

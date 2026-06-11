@@ -175,7 +175,7 @@ final class RuntimeArchitectureTests: XCTestCase {
 
     @MainActor
     func testManagedFocusRequestCarriesOriginAndResistsPointerDowngrade() {
-        let bridge = FocusBridgeCoordinator()
+        let bridge = FocusBridgeCoordinator(intentLedger: IntentLedger(), deadlineWheel: DeadlineWheel())
         let workspaceId = WorkspaceDescriptor.ID()
         let token = WindowToken(pid: 100, windowId: 42)
 
@@ -207,7 +207,7 @@ final class RuntimeArchitectureTests: XCTestCase {
 
     @MainActor
     func testConfirmedManagedFocusOriginControlsMouseWarpPolicy() throws {
-        let bridge = FocusBridgeCoordinator()
+        let bridge = FocusBridgeCoordinator(intentLedger: IntentLedger(), deadlineWheel: DeadlineWheel())
         let workspaceId = WorkspaceDescriptor.ID()
         let token = WindowToken(pid: 100, windowId: 42)
         let rekeyedToken = WindowToken(pid: 100, windowId: 43)
@@ -261,7 +261,7 @@ final class RuntimeArchitectureTests: XCTestCase {
 
     @MainActor
     func testDeferredFocusPreservesMergedOrigin() {
-        let bridge = FocusBridgeCoordinator()
+        let bridge = FocusBridgeCoordinator(intentLedger: IntentLedger(), deadlineWheel: DeadlineWheel())
         let firstToken = WindowToken(pid: 100, windowId: 42)
         let secondToken = WindowToken(pid: 101, windowId: 43)
         var performedFocuses: [WindowToken] = []
@@ -2252,7 +2252,11 @@ final class RuntimeArchitectureTests: XCTestCase {
         let initialColumns = engine.columns(in: workspaceId)
         let targetColumn = initialColumns[1]
         let selectedNode = try XCTUnwrap(targetColumn.windowNodes.first)
-        let targetColumnX = state.columnX(at: 1, columns: initialColumns, gap: CGFloat(controller.workspaceManager.gaps))
+        let targetColumnX = state.columnX(
+            at: 1,
+            columns: initialColumns,
+            gap: CGFloat(controller.workspaceManager.gaps)
+        )
         let viewOrigin = targetColumnX - (monitor.visibleFrame.width - columnWidth) / 2
         state.selectedNodeId = selectedNode.id
         state.activeColumnIndex = 1
@@ -2629,7 +2633,10 @@ final class RuntimeArchitectureTests: XCTestCase {
         await Self.waitForRemovalRefresh(controller, removedToken: closingToken)
 
         XCTAssertNil(controller.workspaceManager.entry(for: closingToken))
-        XCTAssertEqual(controller.workspaceManager.niriViewportState(for: workspaceId).selectedNodeId, resolverFallbackNode.id)
+        XCTAssertEqual(
+            controller.workspaceManager.niriViewportState(for: workspaceId).selectedNodeId,
+            resolverFallbackNode.id
+        )
         XCTAssertEqual(focusedTokens.last, resolverFallbackToken)
     }
 
@@ -2713,7 +2720,10 @@ final class RuntimeArchitectureTests: XCTestCase {
         await Self.waitForRemovalRefresh(controller, removedToken: closingToken)
 
         XCTAssertNil(controller.workspaceManager.entry(for: closingToken))
-        XCTAssertEqual(controller.workspaceManager.niriViewportState(for: workspaceId).selectedNodeId, resolverFallbackNode.id)
+        XCTAssertEqual(
+            controller.workspaceManager.niriViewportState(for: workspaceId).selectedNodeId,
+            resolverFallbackNode.id
+        )
         XCTAssertEqual(controller.workspaceManager.lastFocusedToken(in: workspaceId), resolverFallbackToken)
         XCTAssertEqual(focusedTokens.last, resolverFallbackToken)
     }
@@ -2960,7 +2970,12 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertEqual(patchedViewOrigin, viewOrigin, accuracy: 0.001, file: file, line: line)
         XCTAssertFalse(patchedState.viewOffsetPixels.isAnimating, file: file, line: line)
         XCTAssertEqual(patchedState.selectedNodeId, newTabNode.id, file: file, line: line)
-        XCTAssertEqual(finalColumns[position.targetColumnIndex].activeWindow?.token, newTabToken, file: file, line: line)
+        XCTAssertEqual(
+            finalColumns[position.targetColumnIndex].activeWindow?.token,
+            newTabToken,
+            file: file,
+            line: line
+        )
         XCTAssertFalse(engine.hasAnyColumnAnimationsRunning(in: workspaceId), file: file, line: line)
         XCTAssertFalse(engine.hasAnyWindowAnimationsRunning(in: workspaceId), file: file, line: line)
         XCTAssertFalse(plan.animationDirectives.containsStartNiriScroll(for: workspaceId), file: file, line: line)

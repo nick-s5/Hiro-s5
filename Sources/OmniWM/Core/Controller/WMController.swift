@@ -80,9 +80,15 @@ final class WMController {
     let appInfoCache = AppInfoCache()
     let eventIntake = EventIntake()
     let factResolver = FactResolver()
+    let intentLedger = IntentLedger()
+    let deadlineWheel = DeadlineWheel()
     @ObservationIgnored
     private(set) lazy var eventInterpreter = EventInterpreter(controller: self)
-    let focusBridge: FocusBridgeCoordinator
+    @ObservationIgnored
+    private(set) lazy var focusBridge = FocusBridgeCoordinator(
+        intentLedger: intentLedger,
+        deadlineWheel: deadlineWheel
+    )
     let focusPolicyEngine: FocusPolicyEngine
     private let restorePlanner = RestorePlanner()
     let windowRuleEngine = WindowRuleEngine()
@@ -205,9 +211,9 @@ final class WMController {
         self.windowFocusOperations = windowFocusOperations
         self.ownedWindowRegistry = ownedWindowRegistry
         workspaceManager = WorkspaceManager(settings: settings)
-        focusBridge = FocusBridgeCoordinator()
         focusPolicyEngine = FocusPolicyEngine()
         workspaceManager.updateAnimationClock(animationClock)
+        intentLedger.seqProvider = { [eventIntake] in eventIntake.lastSeq }
         hotkeys.onCommand = { [weak self] command in
             guard let self else { return }
             if !eventIntake.enqueue(.hotkeyCommand(command)) {
@@ -2925,6 +2931,8 @@ extension WMController {
                 return
             }
 
+            let intent = intentLedger.registerActivateApp(pid: pid)
+            deadlineWheel.schedule(intentId: intent.id, after: .seconds(1))
             if let axRef = AXWindowService.axWindowRef(for: UInt32(target.windowId), pid: pid) {
                 performWindowFronting(
                     pid: pid,

@@ -1818,6 +1818,11 @@ final class AXEventHandler {
         controller.factResolver.resolveActivationFacts(pid: pid, source: source, origin: origin)
     }
 
+    func handleIntentExpired(_ intentId: IntentID) {
+        guard let controller else { return }
+        _ = controller.intentLedger.markExpired(id: intentId)
+    }
+
     func handleActivationFactsResolved(_ facts: ActivationFacts) {
         guard let controller, controller.hasStartedServices else { return }
 

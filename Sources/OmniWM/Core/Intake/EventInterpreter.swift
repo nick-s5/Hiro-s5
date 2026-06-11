@@ -60,6 +60,9 @@ final class EventInterpreter: EventIntakeSink {
         case let .hotkeyCommand(command):
             _ = controller.commandHandler.handleHotkeyCommand(command)
 
+        case let .intentExpired(intentId):
+            controller.axEventHandler.handleIntentExpired(intentId)
+
         case let .ipcCommand(intake):
             intake.completion(intake.perform(controller))
 

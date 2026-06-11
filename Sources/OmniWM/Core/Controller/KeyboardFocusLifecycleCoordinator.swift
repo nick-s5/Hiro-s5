@@ -61,6 +61,10 @@ private struct FocusOperation: Equatable {
 
 @MainActor
 final class FocusBridgeCoordinator {
+    static let activationSettleDeadline: Duration = .milliseconds(100)
+
+    private let intentLedger: IntentLedger
+    private let deadlineWheel: DeadlineWheel
     private(set) var activeManagedRequest: ManagedFocusRequest?
     private var nextRequestId: UInt64 = 1
     private var pendingFocus: FocusOperation?
@@ -68,6 +72,11 @@ final class FocusBridgeCoordinator {
     private var lastConfirmedManagedFocus: FocusOperation?
     private var isFocusOperationPending = false
     private var lastFocusTime: Date = .distantPast
+
+    init(intentLedger: IntentLedger, deadlineWheel: DeadlineWheel) {
+        self.intentLedger = intentLedger
+        self.deadlineWheel = deadlineWheel
+    }
 
     func beginManagedRequest(
         token: WindowToken,
@@ -83,6 +92,12 @@ final class FocusBridgeCoordinator {
                 activeManagedRequest.origin = mergedOrigin
                 self.activeManagedRequest = activeManagedRequest
             }
+            _ = intentLedger.registerFocusWindow(
+                token: token,
+                workspaceId: workspaceId,
+                origin: origin,
+                correlatedRequestId: activeManagedRequest.requestId
+            )
             return activeManagedRequest
         }
 
@@ -94,6 +109,13 @@ final class FocusBridgeCoordinator {
         )
         nextRequestId += 1
         activeManagedRequest = request
+        let intent = intentLedger.registerFocusWindow(
+            token: token,
+            workspaceId: workspaceId,
+            origin: origin,
+            correlatedRequestId: request.requestId
+        )
+        deadlineWheel.schedule(intentId: intent.id, after: Self.activationSettleDeadline)
         return request
     }
 
@@ -146,6 +168,10 @@ final class FocusBridgeCoordinator {
         activeManagedRequest.retryCount = nextAttempt
         activeManagedRequest.lastActivationSource = source
         self.activeManagedRequest = activeManagedRequest
+        if let intent = intentLedger.openFocusIntent(correlatedRequestId: requestId) {
+            _ = intentLedger.recordRetry(id: intent.id, source: source)
+            deadlineWheel.schedule(intentId: intent.id, after: Self.activationSettleDeadline)
+        }
         return activeManagedRequest
     }
 
@@ -165,6 +191,9 @@ final class FocusBridgeCoordinator {
             origin: activeManagedRequest.origin
         )
         self.activeManagedRequest = nil
+        retireIntent(correlatedRequestId: activeManagedRequest.requestId) {
+            intentLedger.confirm(id: $0, source: source)
+        }
         return activeManagedRequest
     }
 
@@ -180,6 +209,9 @@ final class FocusBridgeCoordinator {
         guard matchesToken, matchesWorkspace else { return nil }
 
         self.activeManagedRequest = nil
+        retireIntent(correlatedRequestId: activeManagedRequest.requestId) {
+            intentLedger.cancel(id: $0)
+        }
         return activeManagedRequest
     }
 
@@ -189,6 +221,9 @@ final class FocusBridgeCoordinator {
             return nil
         }
         self.activeManagedRequest = nil
+        retireIntent(correlatedRequestId: requestId) {
+            intentLedger.cancel(id: $0)
+        }
         return activeManagedRequest
     }
 
@@ -201,6 +236,16 @@ final class FocusBridgeCoordinator {
             lastConfirmedManagedFocus.token = newToken
             self.lastConfirmedManagedFocus = lastConfirmedManagedFocus
         }
+        intentLedger.rekey(from: oldToken, to: newToken)
+    }
+
+    private func retireIntent(
+        correlatedRequestId: UInt64,
+        _ retire: (IntentID) -> Intent?
+    ) {
+        guard let intent = intentLedger.openFocusIntent(correlatedRequestId: correlatedRequestId) else { return }
+        _ = retire(intent.id)
+        deadlineWheel.cancel(intentId: intent.id)
     }
 
     func discardPendingFocus(_ token: WindowToken) {
