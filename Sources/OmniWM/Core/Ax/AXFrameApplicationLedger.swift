@@ -21,6 +21,13 @@ struct AXFrameRetryRequest: Equatable {
     let frame: CGRect
 }
 
+struct AXFrameTerminalRefusal: Equatable {
+    let pid: pid_t
+    let windowId: Int
+    let targetFrame: CGRect
+    let observedFrame: CGRect
+}
+
 struct AXFrameEnqueueDecision {
     var request: AXFrameApplicationRequest?
     var deliveries: [AXFrameTerminalDelivery] = []
@@ -30,6 +37,7 @@ struct AXFrameEnqueueDecision {
 struct AXFrameApplyOutcome {
     var deliveries: [AXFrameTerminalDelivery] = []
     var retries: [AXFrameRetryRequest] = []
+    var terminalRefusals: [AXFrameTerminalRefusal] = []
 }
 
 @MainActor
@@ -300,6 +308,7 @@ final class AXFrameApplicationLedger {
                 continue
             }
 
+            let priorFailureReason = recentFrameWriteFailures[resolvedWindowId]
             if let failureReason = resolvedResult.writeResult.failureReason {
                 recentFrameWriteFailures[resolvedWindowId] = failureReason
             }
@@ -312,6 +321,19 @@ final class AXFrameApplicationLedger {
                   )
             else {
                 retryBudgetByWindowId.removeValue(forKey: resolvedWindowId)
+                if resolvedResult.writeResult.failureReason == .verificationMismatch,
+                   priorFailureReason == .verificationMismatch,
+                   let observedFrame = resolvedResult.writeResult.observedFrame
+                {
+                    outcome.terminalRefusals.append(
+                        AXFrameTerminalRefusal(
+                            pid: resolvedResult.pid,
+                            windowId: resolvedWindowId,
+                            targetFrame: resolvedResult.targetFrame,
+                            observedFrame: observedFrame
+                        )
+                    )
+                }
                 outcome.deliveries.append(contentsOf: notifyPendingFrameObserver(with: resolvedResult))
                 clearSettledRekeyMappings(to: resolvedWindowId)
                 continue

@@ -3156,6 +3156,11 @@ final class WorkspaceManager {
     }
 
     @discardableResult
+    func setObservedMinSize(_ size: CGSize, for token: WindowToken) -> Bool {
+        windows.setObservedMinSize(size, for: token)
+    }
+
+    @discardableResult
     func moveWorkspaceToMonitor(_ workspaceId: WorkspaceDescriptor.ID, to targetMonitorId: Monitor.ID) -> Bool {
         guard let targetMonitor = monitor(byId: targetMonitorId) else { return false }
         guard let sourceMonitor = monitorForWorkspace(workspaceId) else { return false }

@@ -683,6 +683,10 @@ import QuartzCore
                 if let minH = entry.ruleEffects.minHeight {
                     mergedConstraints.minSize.height = max(mergedConstraints.minSize.height, minH)
                 }
+                if let observedMin = entry.observedMinSize {
+                    mergedConstraints.minSize.width = max(mergedConstraints.minSize.width, observedMin.width)
+                    mergedConstraints.minSize.height = max(mergedConstraints.minSize.height, observedMin.height)
+                }
                 mergedConstraints = mergedConstraints.normalized()
             }
 

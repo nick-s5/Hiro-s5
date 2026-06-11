@@ -26,6 +26,7 @@ final class AXManager {
     private var appLaunchObserver: NSObjectProtocol?
     var onAppLaunched: ((NSRunningApplication) -> Void)?
     var onAppTerminated: ((pid_t) -> Void)?
+    var onTerminalFrameRefusal: ((AXFrameTerminalRefusal) -> Void)?
 
     private let frameLedger = AXFrameApplicationLedger()
     private var framesByPidBuffer: [pid_t: [AXFrameApplicationRequest]] = [:]
@@ -483,6 +484,9 @@ final class AXManager {
         }
         for delivery in outcome.deliveries {
             delivery.deliver()
+        }
+        for refusal in outcome.terminalRefusals {
+            onTerminalFrameRefusal?(refusal)
         }
     }
 

@@ -47,6 +47,7 @@ enum RefreshReason: String, Sendable {
     case workspaceLayoutToggled
     case appTerminated
     case windowRuleReevaluation
+    case observedConstraintsChanged
     case layoutCommand
     case interactiveGesture
     case axWindowCreated
@@ -75,6 +76,7 @@ enum RefreshReason: String, Sendable {
              .gapsChanged,
              .workspaceLayoutToggled,
              .windowRuleReevaluation,
+             .observedConstraintsChanged,
              .axWindowCreated,
              .axWindowChanged,
              .staleLayoutPlan:
@@ -111,6 +113,7 @@ enum RefreshReason: String, Sendable {
              .appTerminated,
              .staleFullRescan,
              .windowRuleReevaluation,
+             .observedConstraintsChanged,
              .layoutCommand,
              .interactiveGesture,
              .appHidden,

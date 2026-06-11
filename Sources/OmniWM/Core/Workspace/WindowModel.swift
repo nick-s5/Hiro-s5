@@ -157,6 +157,7 @@ final class WindowModel {
         var prevParentKind: ParentKind?
         var cachedConstraints: WindowSizeConstraints?
         var constraintsCacheTime: Date?
+        var observedMinSize: CGSize?
 
         var token: WindowToken {
             handle.id
@@ -730,4 +731,15 @@ final class WindowModel {
         entry.constraintsCacheTime = Date()
     }
 
+    func setObservedMinSize(_ size: CGSize, for token: WindowToken) -> Bool {
+        guard let entry = entries[token] else { return false }
+        if let existing = entry.observedMinSize,
+           abs(existing.width - size.width) <= FrameTolerance.frameWrite,
+           abs(existing.height - size.height) <= FrameTolerance.frameWrite
+        {
+            return false
+        }
+        entry.observedMinSize = size
+        return true
+    }
 }

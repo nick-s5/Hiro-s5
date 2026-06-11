@@ -1267,6 +1267,30 @@ final class WMController {
         }
     }
 
+    func adoptObservedSizeAfterTerminalFrameRefusal(_ refusal: AXFrameTerminalRefusal) {
+        let token = WindowToken(pid: refusal.pid, windowId: refusal.windowId)
+        guard let entry = workspaceManager.entry(for: token),
+              entry.mode == .tiling,
+              workspaceManager.hiddenState(for: token) == nil
+        else {
+            return
+        }
+
+        let target = refusal.targetFrame.size
+        let observed = refusal.observedFrame.size
+        let observedMin = CGSize(
+            width: observed.width > target.width + FrameTolerance.frameWrite ? observed.width : 1,
+            height: observed.height > target.height + FrameTolerance.frameWrite ? observed.height : 1
+        )
+        guard observedMin.width > 1 || observedMin.height > 1 else { return }
+
+        guard workspaceManager.setObservedMinSize(observedMin, for: token) else { return }
+        layoutRefreshController.requestRelayout(
+            reason: .observedConstraintsChanged,
+            affectedWorkspaceIds: [entry.workspaceId]
+        )
+    }
+
     private func evaluateSizeConstraints(
         for token: WindowToken,
         axRef: AXWindowRef
