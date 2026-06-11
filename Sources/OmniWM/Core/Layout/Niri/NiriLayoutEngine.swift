@@ -119,6 +119,8 @@ final class NiriLayoutEngine {
     var framePool: [WindowToken: CGRect] = [:]
     var hiddenPool: [WindowToken: HideSide] = [:]
 
+    var axisSolveCache: [NiriAxisSolveKey: [NiriAxisSolver.Output]] = [:]
+
     var maxVisibleColumns: Int
     var infiniteLoop: Bool
 

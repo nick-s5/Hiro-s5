@@ -4,7 +4,7 @@ enum NiriAxisSolver {
     @usableFromInline
     static let minimumRenderableSpan: CGFloat = 1
 
-    struct Input {
+    struct Input: Hashable {
         let weight: CGFloat
         let minConstraint: CGFloat
         let maxConstraint: CGFloat
@@ -18,6 +18,16 @@ enum NiriAxisSolver {
         let value: CGFloat
         let wasConstrained: Bool
     }
+}
+
+struct NiriAxisSolveKey: Hashable {
+    let inputs: [NiriAxisSolver.Input]
+    let availableSpace: CGFloat
+    let gap: CGFloat
+    let isTabbed: Bool
+}
+
+extension NiriAxisSolver {
 
     @inlinable
     static func solve(

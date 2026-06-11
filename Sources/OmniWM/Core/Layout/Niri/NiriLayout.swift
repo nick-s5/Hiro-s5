@@ -872,12 +872,27 @@ extension NiriLayoutEngine {
             }
         }
 
-        let outputs = NiriAxisSolver.solve(
-            windows: inputs,
+        let cacheKey = NiriAxisSolveKey(
+            inputs: inputs,
             availableSpace: availableSpace,
-            gapSize: gap,
+            gap: gap,
             isTabbed: isTabbed
         )
+        let outputs: [NiriAxisSolver.Output]
+        if let cached = axisSolveCache[cacheKey] {
+            outputs = cached
+        } else {
+            outputs = NiriAxisSolver.solve(
+                windows: inputs,
+                availableSpace: availableSpace,
+                gapSize: gap,
+                isTabbed: isTabbed
+            )
+            if axisSolveCache.count >= 256 {
+                axisSolveCache.removeAll(keepingCapacity: true)
+            }
+            axisSolveCache[cacheKey] = outputs
+        }
 
         for (i, output) in outputs.enumerated() {
             switch orientation {
