@@ -104,10 +104,6 @@ final class AppAXContext {
     private let focusedWindowObserver: ThreadGuardedValue<AXObserver?>
     private let subscribedWindows: ThreadGuardedValue<[Int: AXUIElement]>
 
-    @MainActor static var onWindowDestroyed: ((pid_t, Int) -> Void)?
-    @MainActor static var onWindowMiniaturized: ((pid_t, Int) -> Void)?
-    @MainActor static var onFocusedWindowChanged: ((pid_t) -> Void)?
-
     @MainActor static var contexts: [pid_t: AppAXContext] = [:]
     @MainActor private static var inFlightCreations: [pid_t: Task<AppAXContext?, Error>] = [:]
 
@@ -245,39 +241,24 @@ final class AppAXContext {
 
     nonisolated static func handleWindowDestroyedCallback(
         pid: pid_t,
-        refcon: UnsafeMutableRawPointer?,
-        handler: (@MainActor @Sendable (pid_t, Int) -> Void)? = nil
+        refcon: UnsafeMutableRawPointer?
     ) {
         guard let windowId = destroyNotificationWindowId(from: refcon) else {
             assertionFailure("Received AX destroy callback without a valid windowId refcon")
             return
         }
-        scheduleOnMainRunLoop {
-            if let handler {
-                handler(pid, windowId)
-            } else {
-                AppAXContext.onWindowDestroyed?(pid, windowId)
-            }
-        }
+        EventIntake.post(.axWindowDestroyed(pid: pid, windowId: windowId))
     }
 
     nonisolated static func handleWindowMiniaturizedCallback(
         pid: pid_t,
-        refcon: UnsafeMutableRawPointer?,
-        handler: (@MainActor @Sendable (pid_t, Int) -> Void)? = nil
+        refcon: UnsafeMutableRawPointer?
     ) {
         guard let windowId = destroyNotificationWindowId(from: refcon) else {
             assertionFailure("Received AX miniaturize callback without a valid windowId refcon")
             return
         }
-
-        scheduleOnMainRunLoop {
-            if let handler {
-                handler(pid, windowId)
-            } else {
-                AppAXContext.onWindowMiniaturized?(pid, windowId)
-            }
-        }
+        EventIntake.post(.axWindowMiniaturized(pid: pid, windowId: windowId))
     }
 
     private nonisolated static func addWindowNotifications(
@@ -841,9 +822,7 @@ private func axFocusedWindowChangedCallback(
     var pid: pid_t = 0
     guard AXUIElementGetPid(element, &pid) == .success else { return }
 
-    scheduleOnMainRunLoop {
-        AppAXContext.onFocusedWindowChanged?(pid)
-    }
+    EventIntake.post(.axFocusedWindowChanged(pid: pid))
 }
 
 private func scheduleOnMainRunLoop(_ work: @escaping @MainActor () -> Void) {

@@ -66,26 +66,14 @@ final class ServiceLifecycleManager {
         controller.eventIntake.open(sink: controller.eventInterpreter)
         controller.layoutRefreshController.setup()
         controller.axEventHandler.setup()
-        controller.axManager.onAppLaunched = { [weak self] _ in
-            self?.handleAppLaunched()
+        controller.axManager.onAppLaunched = { _ in
+            EventIntake.post(.appLaunched)
         }
-        controller.axManager.onAppTerminated = { [weak self] pid in
-            self?.handleAppTerminated(pid: pid)
+        controller.axManager.onAppTerminated = { pid in
+            EventIntake.post(.appTerminated(pid: pid))
         }
         controller.axManager.onTerminalFrameRefusal = { [weak controller] refusal in
             controller?.adoptObservedSizeAfterTerminalFrameRefusal(refusal)
-        }
-        AppAXContext.onWindowDestroyed = { [weak controller] pid, windowId in
-            controller?.axEventHandler.handleRemoved(pid: pid, winId: windowId)
-        }
-        AppAXContext.onWindowMiniaturized = { [weak controller] pid, windowId in
-            controller?.axEventHandler.handleWindowMiniaturized(pid: pid, windowId: windowId)
-        }
-        AppAXContext.onFocusedWindowChanged = { [weak controller] pid in
-            controller?.axEventHandler.handleAppActivation(
-                pid: pid,
-                source: .focusedWindowChanged
-            )
         }
         setupWorkspaceObservation()
         controller.mouseEventHandler.setup()
@@ -140,12 +128,12 @@ final class ServiceLifecycleManager {
 
     private func setupDisplayObserver() {
         displayObserver = DisplayConfigurationObserver()
-        displayObserver?.setEventHandler { [weak self] event in
-            self?.handleDisplayEvent(event)
+        displayObserver?.setEventHandler { event in
+            EventIntake.post(.display(event))
         }
     }
 
-    private func handleDisplayEvent(_ event: DisplayConfigurationObserver.DisplayEvent) {
+    func handleDisplayEvent(_ event: DisplayConfigurationObserver.DisplayEvent) {
         switch event {
         case let .disconnected(monitorId, outputId):
             handleMonitorDisconnect(monitorId: monitorId, outputId: outputId)
@@ -250,75 +238,61 @@ final class ServiceLifecycleManager {
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.handleActiveSpaceDidChange()
-            }
+        ) { _ in
+            EventIntake.post(.activeSpaceChanged)
         }
     }
 
     private func setupAppActivationObserver() {
-        guard let controller else { return }
+        guard controller != nil else { return }
         appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak controller] notification in
+        ) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
                 return
             }
-            let pid = app.processIdentifier
-            MainActor.assumeIsolated {
-                controller?.axEventHandler.handleAppActivation(
-                    pid: pid,
-                    source: .workspaceDidActivateApplication
-                )
-            }
+            EventIntake.post(.appActivated(pid: app.processIdentifier))
         }
     }
 
     private func setupAppDeactivationObserver() {
-        guard let controller else { return }
+        guard controller != nil else { return }
         appDeactivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didDeactivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak controller] notification in
+        ) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
                 return
             }
-            MainActor.assumeIsolated {
-                controller?.axEventHandler.handleAppDeactivated(pid: app.processIdentifier)
-            }
+            EventIntake.post(.appDeactivated(pid: app.processIdentifier))
         }
     }
 
     private func setupAppHideObservers() {
-        guard let controller else { return }
+        guard controller != nil else { return }
         appHideObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didHideApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak controller] notification in
+        ) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
                 return
             }
-            MainActor.assumeIsolated {
-                controller?.axEventHandler.handleAppHidden(pid: app.processIdentifier)
-            }
+            EventIntake.post(.appHidden(pid: app.processIdentifier))
         }
 
         appUnhideObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didUnhideApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak controller] notification in
+        ) { notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
                 return
             }
-            MainActor.assumeIsolated {
-                controller?.axEventHandler.handleAppUnhidden(pid: app.processIdentifier)
-            }
+            EventIntake.post(.appUnhidden(pid: app.processIdentifier))
         }
     }
 
@@ -328,22 +302,16 @@ final class ServiceLifecycleManager {
             forName: NSWorkspace.willSleepNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                _ = self?.controller?.workspaceManager.recordReconcileEvent(.systemSleep(source: .service))
-            }
+        ) { _ in
+            EventIntake.post(.systemSleep)
         }
 
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let controller = self?.controller else { return }
-                _ = controller.workspaceManager.recordReconcileEvent(.systemWake(source: .service))
-                controller.layoutRefreshController.requestFullRescan(reason: .unlock)
-            }
+        ) { _ in
+            EventIntake.post(.systemWake)
         }
     }
 
@@ -352,9 +320,6 @@ final class ServiceLifecycleManager {
         controller.hasStartedServices = false
 
         controller.eventIntake.close()
-        AppAXContext.onWindowDestroyed = nil
-        AppAXContext.onWindowMiniaturized = nil
-        AppAXContext.onFocusedWindowChanged = nil
         controller.axManager.onAppLaunched = nil
         controller.axManager.onAppTerminated = nil
         controller.axManager.onTerminalFrameRefusal = nil

@@ -2,7 +2,20 @@ import Foundation
 import os
 
 enum IntakeEvent: Sendable {
+    case activeSpaceChanged
+    case appActivated(pid: pid_t)
+    case appDeactivated(pid: pid_t)
+    case appHidden(pid: pid_t)
+    case appLaunched
+    case appTerminated(pid: pid_t)
+    case appUnhidden(pid: pid_t)
+    case axFocusedWindowChanged(pid: pid_t)
+    case axWindowDestroyed(pid: pid_t, windowId: Int)
+    case axWindowMiniaturized(pid: pid_t, windowId: Int)
     case cgs(CGSWindowEvent)
+    case display(DisplayConfigurationObserver.DisplayEvent)
+    case systemSleep
+    case systemWake
 }
 
 struct StampedIntakeEvent: Sendable {
