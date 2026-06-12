@@ -990,7 +990,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             windowId: 9_101,
             to: workspaceId
         )
-        let staleRevision = manager.runtimeRevision(for: workspaceId)
+        let staleSeq = manager.worldSeq
         manager.setHiddenState(
             HiddenState(
                 proportionalPosition: .zero,
@@ -1006,7 +1006,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: viewportState,
-                runtimeRevision: staleRevision
+                plannedSeq: staleSeq
             )
         )
 
@@ -1030,7 +1030,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             windowId: 9_202,
             to: workspaceId
         )
-        let staleFocusRevision = manager.runtimeRevision(for: workspaceId)
+        let staleFocusSeq = manager.worldSeq
         _ = manager.beginManagedFocusRequest(firstToken, in: workspaceId, requestId: 7)
         var viewportState = ViewportState()
         viewportState.activeColumnIndex = 3
@@ -1040,7 +1040,7 @@ final class RuntimeArchitectureTests: XCTestCase {
                 workspaceId: workspaceId,
                 viewportState: viewportState,
                 rememberedFocusToken: secondToken,
-                runtimeRevision: staleFocusRevision
+                plannedSeq: staleFocusSeq
             )
         )
 
@@ -1049,98 +1049,43 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertEqual(manager.lastFocusedToken(in: workspaceId), firstToken)
     }
 
-    func testPostLayoutActionRefreshesAcceptedRevisionsAndHonorsDomains() {
+    func testPostLayoutActionForwardsAcceptedSeqsAndHonorsDomains() {
         let workspaceId = WorkspaceDescriptor.ID()
         let otherWorkspaceId = WorkspaceDescriptor.ID()
-        let before = RuntimeRevision(
-            runtime: 1,
-            workspace: 10,
-            layout: 20,
-            focus: 30,
-            fullscreen: 40
-        )
-        let after = RuntimeRevision(
-            runtime: 2,
-            workspace: 11,
-            layout: 21,
-            focus: 30,
-            fullscreen: 40
-        )
-        let beforeFocusChanged = RuntimeRevision(
-            runtime: 3,
-            workspace: 10,
-            layout: 20,
-            focus: 31,
-            fullscreen: 40
-        )
-        let afterFocusChanged = RuntimeRevision(
-            runtime: 5,
-            workspace: 11,
-            layout: 21,
-            focus: 31,
-            fullscreen: 40
-        )
-        let unrelated = RuntimeRevision(
-            runtime: 4,
-            workspace: 100,
-            layout: 200,
-            focus: 300,
-            fullscreen: 400
-        )
         let action = RefreshPostLayoutAction(
-            workspaceRevisions: [
-                workspaceId: before,
-                otherWorkspaceId: unrelated
+            workspaceSeqs: [
+                workspaceId: 5,
+                otherWorkspaceId: 7
             ],
             domains: .layoutCommit
         ) {}
 
-        let refreshed = action.refreshingAcceptedRevisions(
-            [
-                workspaceId: AcceptedRuntimeRevision(
-                    before: beforeFocusChanged,
-                    after: afterFocusChanged,
-                    domains: .layoutCommit
-                )
-            ]
+        let forwarded = action.forwarded(
+            by: [workspaceId: AcceptedSeq(after: 9, domains: .layoutCommit)],
+            currentAtEntry: [workspaceId]
         )
-        let notRefreshed = action.refreshingAcceptedRevisions(
-            [
-                workspaceId: AcceptedRuntimeRevision(
-                    before: after,
-                    after: before,
-                    domains: .layoutCommit
-                )
-            ]
+        let notCurrentAtEntry = action.forwarded(
+            by: [workspaceId: AcceptedSeq(after: 9, domains: .layoutCommit)],
+            currentAtEntry: []
         )
         let focusAction = RefreshPostLayoutAction(
-            workspaceRevisions: [workspaceId: before],
+            workspaceSeqs: [workspaceId: 5],
             domains: .focusCommit
         ) {}
-        let staleFocusNotRebased = focusAction.refreshingAcceptedRevisions(
-            [
-                workspaceId: AcceptedRuntimeRevision(
-                    before: before,
-                    after: afterFocusChanged,
-                    domains: .layoutCommit
-                )
-            ]
+        let uncoveredDomainsNotForwarded = focusAction.forwarded(
+            by: [workspaceId: AcceptedSeq(after: 9, domains: .layoutCommit)],
+            currentAtEntry: [workspaceId]
         )
-        let acceptedFocusRebased = focusAction.refreshingAcceptedRevisions(
-            [
-                workspaceId: AcceptedRuntimeRevision(
-                    before: before,
-                    after: afterFocusChanged,
-                    domains: .layoutCommit.union(.focusCommit)
-                )
-            ]
+        let coveredDomainsForwarded = focusAction.forwarded(
+            by: [workspaceId: AcceptedSeq(after: 9, domains: .layoutCommit.union(.focusCommit))],
+            currentAtEntry: [workspaceId]
         )
 
-        XCTAssertEqual(refreshed.workspaceRevisions[workspaceId], afterFocusChanged)
-        XCTAssertEqual(refreshed.workspaceRevisions[otherWorkspaceId], unrelated)
-        XCTAssertEqual(notRefreshed.workspaceRevisions[workspaceId], before)
-        XCTAssertEqual(staleFocusNotRebased.workspaceRevisions[workspaceId], before)
-        XCTAssertEqual(acceptedFocusRebased.workspaceRevisions[workspaceId], afterFocusChanged)
+        XCTAssertEqual(forwarded.workspaceSeqs[workspaceId], 9)
+        XCTAssertEqual(forwarded.workspaceSeqs[otherWorkspaceId], 7)
+        XCTAssertEqual(notCurrentAtEntry.workspaceSeqs[workspaceId], 5)
+        XCTAssertEqual(uncoveredDomainsNotForwarded.workspaceSeqs[workspaceId], 5)
+        XCTAssertEqual(coveredDomainsForwarded.workspaceSeqs[workspaceId], 9)
         XCTAssertTrue(action.hasWorkspace(in: [workspaceId]))
     }
 
@@ -1155,17 +1100,17 @@ final class RuntimeArchitectureTests: XCTestCase {
             windowId: 765_105,
             to: workspaceId
         )
-        let revision = controller.workspaceManager.runtimeRevision(for: workspaceId)
+        let plannedSeq = controller.workspaceManager.worldSeq
 
         let accepted = try XCTUnwrap(
-            controller.layoutRefreshController.executeLayoutPlanReturningAcceptedRevision(
+            controller.layoutRefreshController.executeLayoutPlanReturningAcceptedSeq(
                 WorkspaceLayoutPlan(
                     workspaceId: workspaceId,
                     monitor: Self.layoutMonitorSnapshot(monitor),
-                    runtimeRevision: revision,
+                    plannedSeq: plannedSeq,
                     sessionPatch: WorkspaceSessionPatch(
                         workspaceId: workspaceId,
-                        runtimeRevision: revision
+                        plannedSeq: plannedSeq
                     ),
                     diff: WorkspaceLayoutDiff(),
                     animationDirectives: [.activateWindow(token: token)]
@@ -1173,8 +1118,10 @@ final class RuntimeArchitectureTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(accepted.after, controller.workspaceManager.runtimeRevision(for: workspaceId))
-        XCTAssertNotEqual(accepted.after.focus, revision.focus)
+        XCTAssertEqual(accepted.after, controller.workspaceManager.worldSeq)
+        XCTAssertFalse(
+            controller.workspaceManager.isSeqCurrent(plannedSeq, for: workspaceId, domains: .focusCommit)
+        )
         XCTAssertTrue(accepted.domains.contains(.focus))
         XCTAssertEqual(controller.workspaceManager.pendingFocusedToken, token)
     }
@@ -2097,7 +2044,7 @@ final class RuntimeArchitectureTests: XCTestCase {
                 workspaceId: workspaceId,
                 viewportState: state,
                 rememberedFocusToken: nil,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         controller.niriLayoutHandler.requestSelectedWindowFocusAfterLayout(in: workspaceId)
@@ -2223,7 +2170,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: state,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
 
@@ -2304,7 +2251,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: state,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
 
@@ -2367,7 +2314,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: state,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
 
@@ -2473,7 +2420,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: state,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
 
@@ -2893,7 +2840,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
                 viewportState: state,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
 

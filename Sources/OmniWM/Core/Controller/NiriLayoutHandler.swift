@@ -310,7 +310,7 @@ enum NiriWindowMoveResult {
             workspaceId: wsId,
             monitor: refreshInput.monitor,
             windows: refreshInput.windows,
-            runtimeRevision: refreshInput.runtimeRevision,
+            plannedSeq: refreshInput.plannedSeq,
             viewportState: effectiveViewportState,
             preferredFocusToken: controller.workspaceManager.preferredFocusToken(in: wsId),
             hasCompletedInitialRefresh: controller.layoutRefreshController.layoutState.hasCompletedInitialRefresh,
@@ -362,11 +362,11 @@ enum NiriWindowMoveResult {
         return WorkspaceLayoutPlan(
             workspaceId: snapshot.workspaceId,
             monitor: snapshot.monitor,
-            runtimeRevision: snapshot.runtimeRevision,
+            plannedSeq: snapshot.plannedSeq,
             sessionPatch: WorkspaceSessionPatch(
                 workspaceId: snapshot.workspaceId,
                 viewportState: animationTime == nil ? nil : snapshot.viewportState,
-                runtimeRevision: snapshot.runtimeRevision
+                plannedSeq: snapshot.plannedSeq
             ),
             diff: diff,
             isAnimationTick: animationTime != nil
@@ -900,13 +900,13 @@ enum NiriWindowMoveResult {
         return WorkspaceLayoutPlan(
             workspaceId: pass.wsId,
             monitor: snapshot.monitor,
-            runtimeRevision: snapshot.runtimeRevision,
+            plannedSeq: snapshot.plannedSeq,
             sessionPatch: WorkspaceSessionPatch(
                 workspaceId: pass.wsId,
                 viewportState: state,
                 rememberedFocusToken: rememberedFocusToken,
                 baseSelectionRevision: snapshot.viewportState.selectionRevision,
-                runtimeRevision: snapshot.runtimeRevision
+                plannedSeq: snapshot.plannedSeq
             ),
             diff: diff,
             animationDirectives: directives
@@ -1014,7 +1014,7 @@ enum NiriWindowMoveResult {
                 TabbedColumnOverlayInfo(
                     workspaceId: workspaceId,
                     columnId: column.id,
-                    runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId),
+                    plannedSeq: controller.workspaceManager.worldSeq,
                     columnFrame: frame,
                     visibleColumnFrame: visibleColumnFrame,
                     tabCount: windows.count,
@@ -1073,8 +1073,8 @@ enum NiriWindowMoveResult {
     ) {
         guard let controller, let engine = controller.niriEngine else { return }
         let workspaceId = info.workspaceId
-        guard controller.workspaceManager.isRuntimeRevisionCurrent(
-            info.runtimeRevision,
+        guard controller.workspaceManager.isSeqCurrent(
+            info.plannedSeq,
             for: workspaceId,
             domains: .layoutCommit
         ) else {
@@ -1123,7 +1123,7 @@ enum NiriWindowMoveResult {
                 workspaceId: workspaceId,
                 viewportState: state,
                 rememberedFocusToken: nil,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         let updatedState = controller.workspaceManager.niriViewportState(for: workspaceId)
@@ -1173,7 +1173,7 @@ enum NiriWindowMoveResult {
                     workspaceId: wsId,
                     viewportState: state,
                     rememberedFocusToken: nil,
-                    runtimeRevision: controller.workspaceManager.runtimeRevision(for: wsId)
+                    plannedSeq: controller.workspaceManager.worldSeq
                 )
             )
             return
@@ -1210,7 +1210,7 @@ enum NiriWindowMoveResult {
                     workspaceId: wsId,
                     viewportState: state,
                     rememberedFocusToken: nil,
-                    runtimeRevision: controller.workspaceManager.runtimeRevision(for: wsId)
+                    plannedSeq: controller.workspaceManager.worldSeq
                 )
             )
             requestSelectedWindowFocusAfterLayout(in: wsId)

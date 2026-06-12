@@ -1248,7 +1248,7 @@ final class AXEventHandler {
     ) {
         guard let controller else { return }
         let canApplySynchronously = controller.axManager.hasContext(for: pid)
-        let runtimeRevision = controller.workspaceManager.runtimeRevision(for: workspaceId)
+        let plannedSeq = controller.workspaceManager.worldSeq
 
         if canApplySynchronously {
             applyFloatingCreateFrame(
@@ -1257,7 +1257,7 @@ final class AXEventHandler {
                 pid: pid,
                 windowId: windowId,
                 workspaceId: workspaceId,
-                runtimeRevision: runtimeRevision
+                plannedSeq: plannedSeq
             )
             if controller.axManager.recentFrameWriteFailure(for: windowId) == .contextUnavailable {
                 Task { @MainActor [weak self] in
@@ -1269,7 +1269,7 @@ final class AXEventHandler {
                         pid: pid,
                         windowId: windowId,
                         workspaceId: workspaceId,
-                        runtimeRevision: runtimeRevision
+                        plannedSeq: plannedSeq
                     )
                 }
             }
@@ -1285,7 +1285,7 @@ final class AXEventHandler {
                 pid: pid,
                 windowId: windowId,
                 workspaceId: workspaceId,
-                runtimeRevision: runtimeRevision
+                plannedSeq: plannedSeq
             )
             if self.controller?.axManager.recentFrameWriteFailure(for: windowId) == .contextUnavailable {
                 await self.warmAXContextIfNeeded(for: pid)
@@ -1295,7 +1295,7 @@ final class AXEventHandler {
                     pid: pid,
                     windowId: windowId,
                     workspaceId: workspaceId,
-                    runtimeRevision: runtimeRevision
+                    plannedSeq: plannedSeq
                 )
             }
         }
@@ -1307,12 +1307,12 @@ final class AXEventHandler {
         pid: pid_t,
         windowId: Int,
         workspaceId: WorkspaceDescriptor.ID,
-        runtimeRevision: RuntimeRevision
+        plannedSeq: UInt64
     ) {
         guard let controller,
               controller.workspaceManager.entry(for: token)?.workspaceId == workspaceId,
-              controller.workspaceManager.isRuntimeRevisionCurrent(
-                  runtimeRevision,
+              controller.workspaceManager.isSeqCurrent(
+                  plannedSeq,
                   for: workspaceId,
                   domains: .layoutCommit
               ),
@@ -2402,7 +2402,7 @@ final class AXEventHandler {
                     workspaceId: wsId,
                     viewportState: state,
                     rememberedFocusToken: nil,
-                    runtimeRevision: controller.workspaceManager.runtimeRevision(for: wsId)
+                    plannedSeq: controller.workspaceManager.worldSeq
                 )
             )
             if preserveReplacementViewport {

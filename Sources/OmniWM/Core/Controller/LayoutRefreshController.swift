@@ -85,7 +85,7 @@ import QuartzCore
     private struct LayoutPlanExecutionResult {
         var didExecute = false
         var rejectedWorkspaceIds: Set<WorkspaceDescriptor.ID> = []
-        var acceptedRevisions: [WorkspaceDescriptor.ID: AcceptedRuntimeRevision] = [:]
+        var acceptedSeqs: [WorkspaceDescriptor.ID: AcceptedSeq] = [:]
     }
 
     private struct CurrentLayoutPlans {
@@ -121,7 +121,7 @@ import QuartzCore
         var pid: pid_t
         var windowId: Int
         var workspaceId: WorkspaceDescriptor.ID
-        var runtimeRevision: RuntimeRevision
+        var plannedSeq: UInt64
         let targetFrame: CGRect
         let targetMonitorId: Monitor.ID
         let hiddenState: HiddenState
@@ -448,9 +448,9 @@ import QuartzCore
     private func executeLayoutPlans(_ plans: [WorkspaceLayoutPlan]) -> LayoutPlanExecutionResult {
         var result = LayoutPlanExecutionResult()
         for plan in plans {
-            if let acceptedRevision = executeLayoutPlanReturningAcceptedRevision(plan) {
+            if let acceptedSeq = executeLayoutPlanReturningAcceptedSeq(plan) {
                 result.didExecute = true
-                result.acceptedRevisions[plan.workspaceId] = acceptedRevision
+                result.acceptedSeqs[plan.workspaceId] = acceptedSeq
             } else {
                 result.rejectedWorkspaceIds.insert(plan.workspaceId)
             }
@@ -465,8 +465,8 @@ import QuartzCore
         var current = CurrentLayoutPlans()
         current.plans.reserveCapacity(plans.count)
         for plan in plans {
-            if controller.workspaceManager.isRuntimeRevisionCurrent(
-                plan.runtimeRevision,
+            if controller.workspaceManager.isSeqCurrent(
+                plan.plannedSeq,
                 for: plan.workspaceId,
                 domains: .layoutCommit
             ) {
@@ -480,25 +480,24 @@ import QuartzCore
 
     @discardableResult
     func executeLayoutPlan(_ plan: WorkspaceLayoutPlan) -> Bool {
-        executeLayoutPlanReturningAcceptedRevision(plan) != nil
+        executeLayoutPlanReturningAcceptedSeq(plan) != nil
     }
 
-    func executeLayoutPlanReturningAcceptedRevision(_ plan: WorkspaceLayoutPlan) -> AcceptedRuntimeRevision? {
+    func executeLayoutPlanReturningAcceptedSeq(_ plan: WorkspaceLayoutPlan) -> AcceptedSeq? {
         guard let controller else { return nil }
-        guard controller.workspaceManager.isRuntimeRevisionCurrent(
-            plan.runtimeRevision,
+        guard controller.workspaceManager.isSeqCurrent(
+            plan.plannedSeq,
             for: plan.workspaceId,
             domains: .layoutCommit
         ) else {
             return nil
         }
 
-        let focusRevisionAccepted = controller.workspaceManager.isRuntimeRevisionCurrent(
-            plan.runtimeRevision,
+        let focusSeqAccepted = controller.workspaceManager.isSeqCurrent(
+            plan.plannedSeq,
             for: plan.workspaceId,
             domains: .focusCommit
         )
-        var acceptedRevision = controller.workspaceManager.runtimeRevision(for: plan.workspaceId)
         controller.withRuntimeFrameJobCancellationSuppressed {
             applySessionPatch(plan.sessionPatch)
             diffExecutor.execute(plan)
@@ -507,14 +506,12 @@ import QuartzCore
         applyAnimationDirectives(
             plan.animationDirectives,
             workspaceId: plan.workspaceId,
-            focusRevisionAccepted: focusRevisionAccepted
+            focusRevisionAccepted: focusSeqAccepted
         )
-        acceptedRevision = controller.workspaceManager.runtimeRevision(for: plan.workspaceId)
         controller.surfaceReconciler.noteWorldChanged()
-        return AcceptedRuntimeRevision(
-            before: plan.runtimeRevision,
-            after: acceptedRevision,
-            domains: focusRevisionAccepted ? .layoutCommit.union(.focusCommit) : .layoutCommit
+        return AcceptedSeq(
+            after: controller.workspaceManager.worldSeq,
+            domains: focusSeqAccepted ? .layoutCommit.union(.focusCommit) : .layoutCommit
         )
     }
 
@@ -556,8 +553,17 @@ import QuartzCore
             rebuildInactiveWorkspaceWindowSet(activeWorkspaceIds: activeWorkspaceIds)
         }
 
+        let actionWorkspacesCurrentAtEntry = plan.postLayoutActions.map {
+            $0.currentWorkspaces(using: controller.workspaceManager)
+        }
+        let forwardedPostLayoutActions = { (acceptedSeqs: [WorkspaceDescriptor.ID: AcceptedSeq]) in
+            zip(plan.postLayoutActions, actionWorkspacesCurrentAtEntry).map { action, currentAtEntry in
+                action.forwarded(by: acceptedSeqs, currentAtEntry: currentAtEntry)
+            }
+        }
+
         let layoutResult = executeLayoutPlans(currentPlans.plans)
-        var acceptedRevisions = layoutResult.acceptedRevisions
+        var acceptedSeqs = layoutResult.acceptedSeqs
         if !plan.workspacePlans.isEmpty, !layoutResult.didExecute {
             return false
         }
@@ -574,24 +580,20 @@ import QuartzCore
                 restoreWorkspaceInactiveFloatingWindows(activeWorkspaceIds: activeWorkspaceIds)
                 hideInactiveWorkspaces(activeWorkspaceIds: activeWorkspaceIds)
             }
-            for workspaceId in Array(acceptedRevisions.keys) {
-                guard let accepted = acceptedRevisions[workspaceId] else { continue }
-                acceptedRevisions[workspaceId] = AcceptedRuntimeRevision(
-                    before: accepted.before,
-                    after: controller.workspaceManager.runtimeRevision(for: workspaceId),
+            for workspaceId in Array(acceptedSeqs.keys) {
+                guard let accepted = acceptedSeqs[workspaceId] else { continue }
+                acceptedSeqs[workspaceId] = AcceptedSeq(
+                    after: controller.workspaceManager.worldSeq,
                     domains: accepted.domains
                 )
             }
         }
 
         if !rejectedWorkspaceIds.isEmpty {
-            let stalePostLayoutActions = plan.postLayoutActions.map {
-                $0.refreshingAcceptedRevisions(acceptedRevisions)
-            }
             enqueueRefresh(
                 staleLayoutRefresh(
                     affectedWorkspaceIds: rejectedWorkspaceIds,
-                    postLayoutActions: stalePostLayoutActions
+                    postLayoutActions: forwardedPostLayoutActions(acceptedSeqs)
                 )
             )
         }
@@ -608,10 +610,7 @@ import QuartzCore
             )
         }
 
-        let acceptedPostLayoutActions = plan.postLayoutActions.map {
-            $0.refreshingAcceptedRevisions(acceptedRevisions)
-        }
-        for postLayoutAction in acceptedPostLayoutActions
+        for postLayoutAction in forwardedPostLayoutActions(acceptedSeqs)
             where !postLayoutAction.hasWorkspace(in: rejectedWorkspaceIds)
         {
             postLayoutAction.runIfCurrent(using: controller.workspaceManager)
@@ -761,7 +760,7 @@ import QuartzCore
             monitor: monitorSnapshot,
             windows: windows,
             isActiveWorkspace: isActiveWorkspace,
-            runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+            plannedSeq: controller.workspaceManager.worldSeq
         )
     }
 
@@ -922,13 +921,14 @@ import QuartzCore
     ) -> RefreshPostLayoutAction? {
         guard let postLayout else { return nil }
         guard let controller, !workspaceIds.isEmpty else { return nil }
-        var revisions: [WorkspaceDescriptor.ID: RuntimeRevision] = [:]
-        revisions.reserveCapacity(workspaceIds.count)
+        let plannedSeq = controller.workspaceManager.worldSeq
+        var seqs: [WorkspaceDescriptor.ID: UInt64] = [:]
+        seqs.reserveCapacity(workspaceIds.count)
         for workspaceId in workspaceIds {
-            revisions[workspaceId] = controller.workspaceManager.runtimeRevision(for: workspaceId)
+            seqs[workspaceId] = plannedSeq
         }
         return RefreshPostLayoutAction(
-            workspaceRevisions: revisions,
+            workspaceSeqs: seqs,
             domains: domains,
             action: postLayout
         )
@@ -2729,7 +2729,7 @@ import QuartzCore
             pid: entry.pid,
             windowId: entry.windowId,
             workspaceId: entry.workspaceId,
-            runtimeRevision: controller.workspaceManager.runtimeRevision(for: entry.workspaceId),
+            plannedSeq: controller.workspaceManager.worldSeq,
             targetFrame: targetFrame,
             targetMonitorId: monitor.id,
             hiddenState: hiddenState,
@@ -2759,7 +2759,7 @@ import QuartzCore
         transaction.windowId = entry.windowId
         transaction.workspaceId = entry.workspaceId
         if let controller {
-            transaction.runtimeRevision = controller.workspaceManager.runtimeRevision(for: entry.workspaceId)
+            transaction.plannedSeq = controller.workspaceManager.worldSeq
         }
         pendingRevealTransactionsByWindowId[newWindowId] = transaction
 
@@ -2771,7 +2771,7 @@ import QuartzCore
         }
     }
 
-    fileprivate func refreshPendingRevealTransactionRuntimeRevision(
+    fileprivate func refreshPendingRevealTransactionPlannedSeq(
         forWindowId windowId: Int,
         transactionId: UInt64
     ) {
@@ -2781,7 +2781,7 @@ import QuartzCore
         else {
             return
         }
-        transaction.runtimeRevision = controller.workspaceManager.runtimeRevision(for: transaction.workspaceId)
+        transaction.plannedSeq = controller.workspaceManager.worldSeq
         pendingRevealTransactionsByWindowId[windowId] = transaction
     }
 
@@ -2903,7 +2903,14 @@ import QuartzCore
             )
             return
         }
-        let preSuccessRevision = controller.workspaceManager.runtimeRevision(for: pendingTransaction.workspaceId)
+        let actionWorkspacesCurrentAtEntry = pendingTransaction.postSuccessActions.map {
+            $0.currentWorkspaces(using: controller.workspaceManager)
+        }
+        let focusSeqAccepted = controller.workspaceManager.isSeqCurrent(
+            pendingTransaction.plannedSeq,
+            for: pendingTransaction.workspaceId,
+            domains: .focusCommit
+        )
         controller.withRuntimeFrameJobCancellationSuppressed {
             controller.workspaceManager.setHiddenState(nil, for: pendingTransaction.token)
         }
@@ -2913,14 +2920,15 @@ import QuartzCore
         if let confirmedFrame {
             controller.axManager.confirmFrameWrite(for: pendingTransaction.windowId, frame: confirmedFrame)
         }
-        let acceptedRevisions = acceptedPendingRevealPostSuccessRevisions(
-            pendingTransaction,
-            preSuccessRevision: preSuccessRevision,
-            using: controller
-        )
-        for action in pendingTransaction.postSuccessActions {
+        let acceptedSeqs: [WorkspaceDescriptor.ID: AcceptedSeq] = [
+            pendingTransaction.workspaceId: AcceptedSeq(
+                after: controller.workspaceManager.worldSeq,
+                domains: focusSeqAccepted ? .layoutCommit.union(.focusCommit) : .layoutCommit
+            )
+        ]
+        for (action, currentAtEntry) in zip(pendingTransaction.postSuccessActions, actionWorkspacesCurrentAtEntry) {
             action
-                .refreshingAcceptedRevisions(acceptedRevisions)
+                .forwarded(by: acceptedSeqs, currentAtEntry: currentAtEntry)
                 .runIfCurrent(using: controller.workspaceManager)
         }
     }
@@ -3015,25 +3023,6 @@ import QuartzCore
         )
     }
 
-    private func acceptedPendingRevealPostSuccessRevisions(
-        _ transaction: PendingRevealTransaction,
-        preSuccessRevision: RuntimeRevision,
-        using controller: WMController
-    ) -> [WorkspaceDescriptor.ID: AcceptedRuntimeRevision] {
-        let after = controller.workspaceManager.runtimeRevision(for: transaction.workspaceId)
-        var domains: RuntimeRevisionDomain = .layoutCommit
-        if transaction.runtimeRevision.matches(preSuccessRevision, domains: .focusCommit) {
-            domains.insert(.focus)
-        }
-        return [
-            transaction.workspaceId: AcceptedRuntimeRevision(
-                before: transaction.runtimeRevision,
-                after: after,
-                domains: domains
-            )
-        ]
-    }
-
     private func stalePendingRevealWorkspaceIds(
         _ transaction: PendingRevealTransaction,
         using controller: WMController
@@ -3072,8 +3061,8 @@ import QuartzCore
         _ transaction: PendingRevealTransaction,
         using workspaceManager: WorkspaceManager
     ) -> Bool {
-        workspaceManager.isRuntimeRevisionCurrent(
-            transaction.runtimeRevision,
+        workspaceManager.isSeqCurrent(
+            transaction.plannedSeq,
             for: transaction.workspaceId,
             domains: .layoutCommit
         )
@@ -3588,7 +3577,7 @@ final class LayoutDiffExecutor {
             var revealTransactionIdsByWindowId: [Int: UInt64] = [:]
             revealTransactionIdsByWindowId.reserveCapacity(revealFrameUpdates.count)
             for update in revealFrameUpdates {
-                refreshController.refreshPendingRevealTransactionRuntimeRevision(
+                refreshController.refreshPendingRevealTransactionPlannedSeq(
                     forWindowId: update.windowId,
                     transactionId: update.transactionId
                 )

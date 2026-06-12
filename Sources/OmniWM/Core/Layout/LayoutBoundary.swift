@@ -28,7 +28,7 @@ struct WorkspaceRefreshInput {
     let monitor: LayoutMonitorSnapshot
     let windows: [LayoutWindowSnapshot]
     let isActiveWorkspace: Bool
-    let runtimeRevision: RuntimeRevision
+    let plannedSeq: UInt64
 }
 
 struct NiriWindowRemovalSeed {
@@ -40,7 +40,7 @@ struct NiriWorkspaceSnapshot {
     let workspaceId: WorkspaceDescriptor.ID
     let monitor: LayoutMonitorSnapshot
     let windows: [LayoutWindowSnapshot]
-    let runtimeRevision: RuntimeRevision
+    let plannedSeq: UInt64
     let viewportState: ViewportState
     let preferredFocusToken: WindowToken?
     let hasCompletedInitialRefresh: Bool
@@ -56,7 +56,7 @@ struct DwindleWorkspaceSnapshot {
     let workspaceId: WorkspaceDescriptor.ID
     let monitor: LayoutMonitorSnapshot
     let windows: [LayoutWindowSnapshot]
-    let runtimeRevision: RuntimeRevision
+    let plannedSeq: UInt64
     let preferredFocusToken: WindowToken?
     let settings: ResolvedDwindleSettings
     let isActiveWorkspace: Bool
@@ -91,7 +91,7 @@ struct WorkspaceSessionPatch {
     var viewportState: ViewportState?
     var rememberedFocusToken: WindowToken?
     var baseSelectionRevision: UInt64? = nil
-    var runtimeRevision: RuntimeRevision
+    var plannedSeq: UInt64
 }
 
 struct WorkspaceSessionTransfer {
@@ -120,7 +120,7 @@ struct RefreshExecutionEffects {
 struct WorkspaceLayoutPlan {
     let workspaceId: WorkspaceDescriptor.ID
     let monitor: LayoutMonitorSnapshot
-    var runtimeRevision: RuntimeRevision
+    var plannedSeq: UInt64
     var sessionPatch: WorkspaceSessionPatch
     var diff: WorkspaceLayoutDiff
     var niriRestorePlacements: [WindowToken: PersistedNiriPlacement] = [:]
@@ -129,25 +129,25 @@ struct WorkspaceLayoutPlan {
 }
 
 struct RefreshPostLayoutAction {
-    let workspaceRevisions: [WorkspaceDescriptor.ID: RuntimeRevision]
+    let workspaceSeqs: [WorkspaceDescriptor.ID: UInt64]
     let domains: RuntimeRevisionDomain
     private let action: @MainActor () -> Void
 
     init(
-        workspaceRevisions: [WorkspaceDescriptor.ID: RuntimeRevision] = [:],
+        workspaceSeqs: [WorkspaceDescriptor.ID: UInt64] = [:],
         domains: RuntimeRevisionDomain = [.workspace, .layout, .focus, .fullscreen],
         action: @escaping @MainActor () -> Void
     ) {
-        self.workspaceRevisions = workspaceRevisions
+        self.workspaceSeqs = workspaceSeqs
         self.domains = domains
         self.action = action
     }
 
     @MainActor
     func isCurrent(using workspaceManager: WorkspaceManager) -> Bool {
-        for (workspaceId, revision) in workspaceRevisions {
-            guard workspaceManager.isRuntimeRevisionCurrent(
-                revision,
+        for (workspaceId, plannedSeq) in workspaceSeqs {
+            guard workspaceManager.isSeqCurrent(
+                plannedSeq,
                 for: workspaceId,
                 domains: domains
             ) else {
@@ -157,32 +157,44 @@ struct RefreshPostLayoutAction {
         return true
     }
 
+    @MainActor
+    func currentWorkspaces(using workspaceManager: WorkspaceManager) -> Set<WorkspaceDescriptor.ID> {
+        var current: Set<WorkspaceDescriptor.ID> = []
+        for (workspaceId, plannedSeq) in workspaceSeqs
+            where workspaceManager.isSeqCurrent(plannedSeq, for: workspaceId, domains: domains)
+        {
+            current.insert(workspaceId)
+        }
+        return current
+    }
+
     func hasWorkspace(in workspaceIds: Set<WorkspaceDescriptor.ID>) -> Bool {
-        guard !workspaceRevisions.isEmpty else { return false }
-        for workspaceId in workspaceRevisions.keys where workspaceIds.contains(workspaceId) {
+        guard !workspaceSeqs.isEmpty else { return false }
+        for workspaceId in workspaceSeqs.keys where workspaceIds.contains(workspaceId) {
             return true
         }
         return false
     }
 
-    func refreshingAcceptedRevisions(
-        _ acceptedRevisions: [WorkspaceDescriptor.ID: AcceptedRuntimeRevision]
+    func forwarded(
+        by acceptedSeqs: [WorkspaceDescriptor.ID: AcceptedSeq],
+        currentAtEntry: Set<WorkspaceDescriptor.ID>
     ) -> RefreshPostLayoutAction {
-        var revisions = workspaceRevisions
+        var seqs = workspaceSeqs
         var changed = false
-        for (workspaceId, revision) in workspaceRevisions {
-            guard let accepted = acceptedRevisions[workspaceId],
-                  accepted.domains.intersection(domains) == domains,
-                  revision.matches(accepted.before, domains: domains)
+        for workspaceId in workspaceSeqs.keys {
+            guard let accepted = acceptedSeqs[workspaceId],
+                  currentAtEntry.contains(workspaceId),
+                  accepted.domains.intersection(domains) == domains
             else {
                 continue
             }
-            revisions[workspaceId] = accepted.after
+            seqs[workspaceId] = accepted.after
             changed = true
         }
         guard changed else { return self }
         return RefreshPostLayoutAction(
-            workspaceRevisions: revisions,
+            workspaceSeqs: seqs,
             domains: domains,
             action: action
         )
@@ -195,9 +207,8 @@ struct RefreshPostLayoutAction {
     }
 }
 
-struct AcceptedRuntimeRevision {
-    let before: RuntimeRevision
-    let after: RuntimeRevision
+struct AcceptedSeq {
+    let after: UInt64
     let domains: RuntimeRevisionDomain
 }
 

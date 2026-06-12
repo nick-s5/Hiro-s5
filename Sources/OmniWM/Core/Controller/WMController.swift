@@ -2683,7 +2683,7 @@ final class WMController {
                     workspaceId: workspaceId,
                     viewportState: nil,
                     rememberedFocusToken: token,
-                    runtimeRevision: workspaceManager.runtimeRevision(for: workspaceId)
+                    plannedSeq: workspaceManager.worldSeq
                 )
             )
         }

@@ -94,7 +94,7 @@ struct TabbedColumnOverlayTabInfo: Equatable {
 struct TabbedColumnOverlayInfo: Equatable {
     let workspaceId: WorkspaceDescriptor.ID
     let columnId: NodeId
-    let runtimeRevision: RuntimeRevision
+    let plannedSeq: UInt64
     let columnFrame: CGRect
     let visibleColumnFrame: CGRect
     let activeVisualIndex: Int
@@ -112,7 +112,7 @@ struct TabbedColumnOverlayInfo: Equatable {
     init(
         workspaceId: WorkspaceDescriptor.ID,
         columnId: NodeId,
-        runtimeRevision: RuntimeRevision,
+        plannedSeq: UInt64,
         columnFrame: CGRect,
         visibleColumnFrame: CGRect? = nil,
         tabCount: Int,
@@ -122,7 +122,7 @@ struct TabbedColumnOverlayInfo: Equatable {
     ) {
         self.workspaceId = workspaceId
         self.columnId = columnId
-        self.runtimeRevision = runtimeRevision
+        self.plannedSeq = plannedSeq
         self.columnFrame = columnFrame
         self.visibleColumnFrame = visibleColumnFrame ?? columnFrame
         self.activeVisualIndex = activeVisualIndex

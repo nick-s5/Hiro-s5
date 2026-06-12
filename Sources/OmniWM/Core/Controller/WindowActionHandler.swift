@@ -445,7 +445,7 @@ final class WindowActionHandler {
                 workspaceId: workspaceId,
                 viewportState: targetState,
                 rememberedFocusToken: token,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         controller.layoutRefreshController
@@ -565,7 +565,7 @@ final class WindowActionHandler {
                 workspaceId: workspaceId,
                 viewportState: nil,
                 rememberedFocusToken: rememberedFocusToken ?? token,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: workspaceId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         controller.layoutRefreshController.requestLayoutCommandRelayout(

@@ -278,7 +278,7 @@ final class CommandHandler {
                 workspaceId: wsId,
                 viewportState: state,
                 rememberedFocusToken: nil,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: wsId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         controller.niriLayoutHandler.requestSelectedWindowFocusAfterLayout(in: wsId)
@@ -500,7 +500,7 @@ final class CommandHandler {
                 workspaceId: wsId,
                 viewportState: state,
                 rememberedFocusToken: nil,
-                runtimeRevision: controller.workspaceManager.runtimeRevision(for: wsId)
+                plannedSeq: controller.workspaceManager.worldSeq
             )
         )
         controller.niriLayoutHandler.requestSelectedWindowFocusAfterLayout(in: wsId)

@@ -270,6 +270,19 @@ final class WorkspaceManager {
         return revision.matches(runtimeRevision(for: workspaceId), domains: domains)
     }
 
+    var worldSeq: UInt64 {
+        world.seq
+    }
+
+    func isSeqCurrent(
+        _ plannedSeq: UInt64,
+        for workspaceId: WorkspaceDescriptor.ID,
+        domains: RuntimeRevisionDomain
+    ) -> Bool {
+        guard workspacesById[workspaceId] != nil else { return false }
+        return world.isSeqCurrent(plannedSeq, for: workspaceId, domains: domains)
+    }
+
     @discardableResult
     func recordReconcileEvent(_ event: WMEvent) -> ReconcileTxn {
         let previousFocus = world.focus
@@ -1652,8 +1665,8 @@ final class WorkspaceManager {
 
     @discardableResult
     func applySessionPatch(_ patch: WorkspaceSessionPatch) -> Bool {
-        guard isRuntimeRevisionCurrent(
-            patch.runtimeRevision,
+        guard isSeqCurrent(
+            patch.plannedSeq,
             for: patch.workspaceId,
             domains: .layoutCommit
         ) else {
@@ -1675,8 +1688,8 @@ final class WorkspaceManager {
         }
 
         if let rememberedFocusToken = patch.rememberedFocusToken {
-            if isRuntimeRevisionCurrent(
-                patch.runtimeRevision,
+            if isSeqCurrent(
+                patch.plannedSeq,
                 for: patch.workspaceId,
                 domains: .focusCommit
             ) {
