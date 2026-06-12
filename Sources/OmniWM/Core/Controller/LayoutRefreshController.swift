@@ -166,7 +166,7 @@ import QuartzCore
         var closingAnimationsByDisplay: [CGDirectDisplayID: [Int: ClosingAnimation]] = [:]
         var screenChangeObserver: NSObjectProtocol?
         var hasCompletedInitialRefresh: Bool = false
-        var didExecuteRefreshExecutionPlan: Bool = false
+        var didExecuteEffectPlan: Bool = false
         var refreshGeneration: UInt64 = 0
     }
 
@@ -515,7 +515,7 @@ import QuartzCore
         )
     }
 
-    private func executeRefreshExecutionPlan(_ plan: RefreshExecutionPlan, generation: UInt64) async -> Bool {
+    private func executeEffectPlan(_ plan: EffectPlan, generation: UInt64) async -> Bool {
         guard let controller else { return false }
         guard isCurrentRefreshGeneration(generation) else { return false }
 
@@ -528,7 +528,7 @@ import QuartzCore
                     postLayoutActions: plan.postLayoutActions
                 )
             )
-            layoutState.didExecuteRefreshExecutionPlan = true
+            layoutState.didExecuteEffectPlan = true
             if var activeRefresh = layoutState.activeRefresh {
                 activeRefresh.postLayoutActions.removeAll()
                 activeRefresh.followUpRefresh = nil
@@ -571,7 +571,7 @@ import QuartzCore
             rejectedWorkspaceIds.formUnion(layoutResult.rejectedWorkspaceIds)
         }
 
-        layoutState.didExecuteRefreshExecutionPlan = true
+        layoutState.didExecuteEffectPlan = true
 
         if plan.effects.visibility != nil {
             let activeWorkspaceIds = currentEffectActiveWorkspaceIds ?? currentActiveWorkspaceIds()
@@ -1019,7 +1019,7 @@ import QuartzCore
         }
 
         do {
-            var plan = try await buildRelayoutExecutionPlan(
+            var plan = try await buildRelayoutEffectPlan(
                 useScrollAnimationPath: useScrollAnimationPath,
                 recoverFocus: recoverFocus,
                 affectedWorkspaceIds: refresh.affectedWorkspaceIds
@@ -1027,7 +1027,7 @@ import QuartzCore
             applyRefreshMetadata(refresh, to: &plan)
             try Task.checkCancellation()
             guard isCurrentRefreshGeneration(generation) else { return false }
-            return await executeRefreshExecutionPlan(plan, generation: generation)
+            return await executeEffectPlan(plan, generation: generation)
         } catch {
             return false
         }
@@ -1041,11 +1041,11 @@ import QuartzCore
             return false
         }
 
-        var plan = buildVisibilityExecutionPlan()
+        var plan = buildVisibilityEffectPlan()
         applyRefreshMetadata(refresh, to: &plan)
         guard !Task.isCancelled else { return false }
         guard isCurrentRefreshGeneration(generation) else { return false }
-        return await executeRefreshExecutionPlan(plan, generation: generation)
+        return await executeEffectPlan(plan, generation: generation)
     }
 
     func hideInactiveWorkspacesSync() {
@@ -1081,11 +1081,11 @@ import QuartzCore
         }
 
         do {
-            var plan = try await buildWindowRemovalExecutionPlan(payloads: payloads)
+            var plan = try await buildWindowRemovalEffectPlan(payloads: payloads)
             applyRefreshMetadata(refresh, to: &plan)
             try Task.checkCancellation()
             guard isCurrentRefreshGeneration(generation) else { return false }
-            return await executeRefreshExecutionPlan(plan, generation: generation)
+            return await executeEffectPlan(plan, generation: generation)
         } catch {
             return false
         }
@@ -1096,7 +1096,7 @@ import QuartzCore
         layoutState.activeRefreshTask = nil
         layoutState.activeRefresh = nil
         layoutState.pendingRefresh = nil
-        layoutState.didExecuteRefreshExecutionPlan = false
+        layoutState.didExecuteEffectPlan = false
         layoutState.refreshGeneration &+= 1
         for (_, task) in pendingRevealVerificationTasksByWindowId {
             task.cancel()
@@ -1134,11 +1134,11 @@ import QuartzCore
             return false
         }
 
-        var plan = try await buildFullRefreshExecutionPlan()
+        var plan = try await buildFullEffectPlan()
         applyRefreshMetadata(refresh, to: &plan)
         try Task.checkCancellation()
         guard isCurrentRefreshGeneration(generation) else { return false }
-        return await executeRefreshExecutionPlan(plan, generation: generation)
+        return await executeEffectPlan(plan, generation: generation)
     }
 
     func selectTabInNiri(
@@ -1153,21 +1153,21 @@ import QuartzCore
         )
     }
 
-    private func applyRefreshMetadata(_ refresh: ScheduledRefresh, to plan: inout RefreshExecutionPlan) {
+    private func applyRefreshMetadata(_ refresh: ScheduledRefresh, to plan: inout EffectPlan) {
         if !refresh.postLayoutActions.isEmpty {
             plan.postLayoutActions.append(contentsOf: refresh.postLayoutActions)
         }
     }
 
-    private func buildVisibilityExecutionPlan() -> RefreshExecutionPlan {
-        RefreshExecutionPlan(effects: RefreshExecutionEffects())
+    private func buildVisibilityEffectPlan() -> EffectPlan {
+        EffectPlan(effects: EffectPlanEffects())
     }
 
-    private func buildRelayoutExecutionPlan(
+    private func buildRelayoutEffectPlan(
         useScrollAnimationPath: Bool,
         recoverFocus: Bool,
         affectedWorkspaceIds: Set<WorkspaceDescriptor.ID>
-    ) async throws -> RefreshExecutionPlan {
+    ) async throws -> EffectPlan {
         guard let controller else { return .init() }
 
         let activeWorkspaceIds = currentActiveWorkspaceIds()
@@ -1198,7 +1198,7 @@ import QuartzCore
             workspacePlans.append(contentsOf: plans)
         }
 
-        var effects = RefreshExecutionEffects()
+        var effects = EffectPlanEffects()
         effects.visibility = .init()
 
         if recoverFocus,
@@ -1210,12 +1210,12 @@ import QuartzCore
             effects.focusValidationWorkspaceIds = [focusedWorkspaceId]
         }
 
-        return RefreshExecutionPlan(workspacePlans: workspacePlans, effects: effects)
+        return EffectPlan(workspacePlans: workspacePlans, effects: effects)
     }
 
-    private func buildWindowRemovalExecutionPlan(
+    private func buildWindowRemovalEffectPlan(
         payloads: [WindowRemovalPayload]
-    ) async throws -> RefreshExecutionPlan {
+    ) async throws -> EffectPlan {
         guard let controller else { return .init() }
 
         var dwindleWorkspaces: Set<WorkspaceDescriptor.ID> = []
@@ -1295,16 +1295,16 @@ import QuartzCore
             result[plan.workspaceId] = rememberedFocusToken
         }
 
-        var effects = RefreshExecutionEffects()
+        var effects = EffectPlanEffects()
         effects.visibility = .init()
 
         effects.focusValidationWorkspaceIds = focusValidationWorkspaceIds
         effects.focusValidationPreferredTokens = focusValidationPreferredTokens
 
-        return RefreshExecutionPlan(workspacePlans: workspacePlans, effects: effects)
+        return EffectPlan(workspacePlans: workspacePlans, effects: effects)
     }
 
-    private func buildFullRefreshExecutionPlan() async throws -> RefreshExecutionPlan {
+    private func buildFullEffectPlan() async throws -> EffectPlan {
         guard let controller else { return .init() }
 
         let rescanSeq = controller.workspaceManager.worldSeq
@@ -1629,7 +1629,7 @@ import QuartzCore
             workspacePlans.append(contentsOf: plans)
         }
 
-        var effects = RefreshExecutionEffects()
+        var effects = EffectPlanEffects()
         effects.visibility = .init()
 
         if !controller.workspaceManager.isAppFullscreenActive,
@@ -1643,7 +1643,7 @@ import QuartzCore
         effects.drainDeferredCreatedWindows = true
         effects.subscribeManagedWindows = true
 
-        return RefreshExecutionPlan(workspacePlans: workspacePlans, effects: effects)
+        return EffectPlan(workspacePlans: workspacePlans, effects: effects)
     }
 
     private func shouldPreserveMissingWindowsDuringNativeFullscreen(
@@ -2016,7 +2016,7 @@ import QuartzCore
 
         layoutState.pendingRefresh = nil
         layoutState.activeRefresh = refresh
-        layoutState.didExecuteRefreshExecutionPlan = false
+        layoutState.didExecuteEffectPlan = false
         let refreshGeneration = layoutState.refreshGeneration
         layoutState.activeRefreshTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -2058,7 +2058,7 @@ import QuartzCore
     private func finishRefresh(_ refresh: ScheduledRefresh, didComplete: Bool, generation: UInt64) {
         guard generation == layoutState.refreshGeneration else { return }
         let completedRefresh = layoutState.activeRefresh ?? refresh
-        let didExecuteRefreshExecutionPlan = layoutState.didExecuteRefreshExecutionPlan
+        let didExecuteEffectPlan = layoutState.didExecuteEffectPlan
 
         if !didComplete {
             preserveCancelledRefreshState(completedRefresh)
@@ -2066,10 +2066,10 @@ import QuartzCore
 
         layoutState.activeRefreshTask = nil
         layoutState.activeRefresh = nil
-        layoutState.didExecuteRefreshExecutionPlan = false
+        layoutState.didExecuteEffectPlan = false
 
         if didComplete {
-            if !didExecuteRefreshExecutionPlan, let controller {
+            if !didExecuteEffectPlan, let controller {
                 let shouldRequestWorkspaceBarRefresh =
                     completedRefresh.kind != .visibilityRefresh && completedRefresh.needsVisibilityReconciliation
 
@@ -2295,7 +2295,7 @@ import QuartzCore
         let workspaceEntries = workspaceEntriesSnapshot(on: controller)
 
         // Rebuild the workspace-level frame suppression set (live check in applyFramesParallel).
-        // Note: this is also called earlier in executeRefreshExecutionPlan to unblock frame
+        // Note: this is also called earlier in executeEffectPlan to unblock frame
         // writes for newly-active workspaces. The rebuild here keeps the set consistent with
         // the snapshot used for the hide pass below.
         var allEntries: [(workspaceId: WorkspaceDescriptor.ID, windowId: Int)] = []

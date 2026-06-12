@@ -107,7 +107,7 @@ enum AnimationDirective {
 
 struct RefreshVisibilityEffect: Equatable {}
 
-struct RefreshExecutionEffects {
+struct EffectPlanEffects {
     var visibility: RefreshVisibilityEffect?
     var focusValidationWorkspaceIds: [WorkspaceDescriptor.ID] = []
     var focusValidationPreferredTokens: [WorkspaceDescriptor.ID: WindowToken] = [:]
@@ -211,8 +211,8 @@ struct AcceptedSeq {
     let domains: InvalidationDomain
 }
 
-struct RefreshExecutionPlan {
+struct EffectPlan {
     var workspacePlans: [WorkspaceLayoutPlan] = []
-    var effects: RefreshExecutionEffects = .init()
+    var effects: EffectPlanEffects = .init()
     var postLayoutActions: [RefreshPostLayoutAction] = []
 }
