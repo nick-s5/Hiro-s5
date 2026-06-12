@@ -1,89 +1,22 @@
 import AppKit
 import Foundation
 
-enum ViewOffset: Equatable {
-    case `static`(CGFloat)
-    case spring(SpringAnimation)
-
-    static func == (lhs: ViewOffset, rhs: ViewOffset) -> Bool {
-        switch (lhs, rhs) {
-        case let (.static(lhsOffset), .static(rhsOffset)):
-            lhsOffset == rhsOffset
-        case let (.spring(lhsAnimation), .spring(rhsAnimation)):
-            lhsAnimation === rhsAnimation
-        default:
-            false
-        }
+struct OffsetTransition: Equatable {
+    enum Kind: Equatable {
+        case jump
+        case spring(SpringConfig)
     }
 
-    func current() -> CGFloat {
-        switch self {
-        case let .static(offset):
-            offset
-        case let .spring(anim):
-            CGFloat(anim.value(at: CACurrentMediaTime()))
-        }
-    }
-
-    func value(at time: TimeInterval) -> CGFloat {
-        switch self {
-        case let .static(offset):
-            offset
-        case let .spring(anim):
-            CGFloat(anim.value(at: time))
-        }
-    }
-
-    func target() -> CGFloat {
-        switch self {
-        case let .static(offset):
-            offset
-        case let .spring(anim):
-            CGFloat(anim.target)
-        }
-    }
-
-    var isAnimating: Bool {
-        switch self {
-        case .spring:
-            true
-        case .static:
-            false
-        }
-    }
-
-    mutating func offset(delta: Double) {
-        switch self {
-        case .static(let offset):
-            self = .static(CGFloat(Double(offset) + delta))
-        case .spring(let anim):
-            anim.offsetBy(delta)
-        }
-    }
-
-    func currentVelocity(at time: TimeInterval = CACurrentMediaTime()) -> Double {
-        switch self {
-        case .static:
-            0
-        case let .spring(anim):
-            anim.velocity(at: time)
-        }
-    }
-
-    func velocity(at time: TimeInterval) -> Double {
-        switch self {
-        case .static:
-            0
-        case let .spring(anim):
-            anim.velocity(at: time)
-        }
-    }
+    var rebaseDelta: CGFloat = 0
+    var kind: Kind?
 }
 
 struct ViewportState: Equatable {
     var activeColumnIndex: Int = 0
 
-    var viewOffsetPixels: ViewOffset = .static(0.0)
+    var viewOffset: CGFloat = 0.0
+
+    var offsetTransition = OffsetTransition()
 
     var selectionProgress: CGFloat = 0.0
 
@@ -99,6 +32,31 @@ struct ViewportState: Equatable {
 }
 
 extension ViewportState {
+    var hasPendingSpringTransition: Bool {
+        if case .spring = offsetTransition.kind { return true }
+        return false
+    }
+
+    mutating func rebaseOffset(by delta: CGFloat) {
+        viewOffset += delta
+        offsetTransition.rebaseDelta += delta
+    }
+
+    mutating func jumpOffset(to offset: CGFloat) {
+        offsetTransition.rebaseDelta += offset - viewOffset
+        viewOffset = offset
+        offsetTransition.kind = .jump
+    }
+
+    mutating func springOffset(to offset: CGFloat, config: SpringConfig? = nil) {
+        viewOffset = offset
+        offsetTransition.kind = .spring(config ?? springConfig)
+    }
+
+    mutating func clearOffsetTransition() {
+        offsetTransition = OffsetTransition()
+    }
+
     mutating func resolveCommitConflicts(against current: ViewportState, hasStaleSelection: Bool) {
         if hasStaleSelection {
             selectedNodeId = current.selectedNodeId

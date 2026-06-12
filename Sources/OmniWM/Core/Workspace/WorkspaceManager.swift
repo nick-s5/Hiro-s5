@@ -297,7 +297,22 @@ final class WorkspaceManager {
         }
         noteAuxiliaryFocusInvalidationIfNeeded(for: event, previousFocus: previousFocus, plan: txn.plan)
         if let viewportWorkspaceId {
-            noteViewportInvalidationIfNeeded(for: viewportWorkspaceId, previousViewport: previousViewport)
+            noteViewportInvalidationIfNeeded(
+                for: viewportWorkspaceId,
+                previousViewport: previousViewport,
+                pendingSpringTransition: viewportEventState(for: event)?.hasPendingSpringTransition == true
+            )
+            if let eventState = viewportEventState(for: event) {
+                animationDriver.reconcileViewportCommit(
+                    workspaceId: viewportWorkspaceId,
+                    previous: previousViewport,
+                    next: world.viewports[viewportWorkspaceId] ?? eventState,
+                    transition: eventState.offsetTransition
+                )
+            }
+        }
+        if case let .viewportForgotten(workspaceIds, _) = event {
+            animationDriver.removeMotions(for: workspaceIds)
         }
         return txn
     }
@@ -324,12 +339,28 @@ final class WorkspaceManager {
         }
     }
 
+    private func viewportEventState(for event: WMEvent) -> ViewportState? {
+        switch event {
+        case let .viewportChanged(_, state, _):
+            state
+        case let .viewportCommitted(_, state, _, _):
+            state
+        default:
+            nil
+        }
+    }
+
     private func noteViewportInvalidationIfNeeded(
         for workspaceId: WorkspaceDescriptor.ID,
-        previousViewport: ViewportState?
+        previousViewport: ViewportState?,
+        pendingSpringTransition: Bool
     ) {
         guard let nextViewport = world.viewports[workspaceId],
-              niriViewportChangeRequiresInvalidation(previous: previousViewport, next: nextViewport)
+              niriViewportChangeRequiresInvalidation(
+                  previous: previousViewport,
+                  next: nextViewport,
+                  pendingSpringTransition: pendingSpringTransition
+              )
         else {
             return
         }
@@ -3037,10 +3068,11 @@ final class WorkspaceManager {
 
     private func niriViewportChangeRequiresInvalidation(
         previous: ViewportState?,
-        next: ViewportState
+        next: ViewportState,
+        pendingSpringTransition: Bool
     ) -> Bool {
         guard let previous else {
-            return next.selectedNodeId != nil || !next.viewOffsetPixels.isAnimating
+            return next.selectedNodeId != nil || !pendingSpringTransition
         }
         if previous.selectedNodeId != next.selectedNodeId {
             return true
@@ -3048,7 +3080,7 @@ final class WorkspaceManager {
         if previous.activeColumnIndex != next.activeColumnIndex {
             return true
         }
-        if previous.viewOffsetPixels.target() != next.viewOffsetPixels.target() {
+        if previous.viewOffset != next.viewOffset {
             return true
         }
         if previous.viewOffsetToRestore != next.viewOffsetToRestore {

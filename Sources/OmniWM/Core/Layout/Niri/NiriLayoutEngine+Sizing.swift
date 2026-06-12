@@ -568,7 +568,7 @@ extension NiriLayoutEngine {
             at: state.activeColumnIndex.clamped(to: 0 ... max(0, columns.count - 1)),
             columns: columns,
             gap: gaps
-        ) + state.viewOffsetPixels.target()
+        ) + state.viewOffset
 
         var widthTaken: CGFloat = 0
         var leftmostColX: CGFloat?

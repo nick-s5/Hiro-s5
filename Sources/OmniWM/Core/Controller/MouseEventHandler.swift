@@ -3,8 +3,8 @@ import Foundation
 
 private let niriTouchpadGestureRecognitionThreshold: CGFloat = 16.0
 // AppKit gives normalized touch positions rather than libinput gesture deltas.
-// This maps normalized movement into the delta space that ViewportState later
-// normalizes with VIEW_GESTURE_WORKING_AREA_MOVEMENT.
+// This maps normalized movement into the delta space that AnimationDriver later
+// normalizes with gestureWorkingAreaMovement.
 private let macNormalizedTouchPositionToNiriGestureUnits: CGFloat = 500.0
 private let mouseWheelAxisEpsilon: CGFloat = 0.001
 private let niriWheelScrollTickAmount: CGFloat = 120.0
@@ -576,7 +576,7 @@ final class MouseEventHandler {
         else { return false }
 
         let edges = resizeEdges(for: location, in: frame)
-        let currentViewOffset = controller.workspaceManager.niriViewportState(for: wsId).viewOffsetPixels.current()
+        let currentViewOffset = controller.workspaceManager.niriViewportState(for: wsId).viewOffset
         if engine.interactiveResizeBegin(
             windowId: tiledWindow.id,
             edges: edges,
@@ -1089,9 +1089,10 @@ final class MouseEventHandler {
 
         if !driver.hasGesture(in: wsId) {
             guard !engine.columns(in: wsId).isEmpty else { return }
-            if controller.workspaceManager.niriViewportState(for: wsId).viewOffsetPixels.isAnimating {
+            let semanticOffset = controller.workspaceManager.niriViewportState(for: wsId).viewOffset
+            if let liveOffset = driver.liveViewOffset(in: wsId, semanticOffset: semanticOffset) {
                 controller.workspaceManager.withNiriViewportState(for: wsId) { vstate in
-                    vstate.settleAtCurrentOffset()
+                    vstate.jumpOffset(to: liveOffset)
                 }
             }
             driver.beginGesture(in: wsId, isTrackpad: true)
@@ -1159,7 +1160,7 @@ final class MouseEventHandler {
                 )
                 didApply = true
             }
-            shouldStartAnimation = vstate.viewOffsetPixels.isAnimating
+            shouldStartAnimation = vstate.hasPendingSpringTransition
         }
 
         if didApply {
@@ -1188,21 +1189,20 @@ final class MouseEventHandler {
         let scale = NSScreen.screens.first(where: { $0.displayId == monitor.displayId })?
             .backingScaleFactor ?? 2.0
 
-        guard let sample = controller.workspaceManager.animationDriver.finishGesture(
+        guard let sample = controller.workspaceManager.animationDriver.sampleGestureEnd(
             in: wsId,
             isTrackpad: true,
             viewportWidth: Double(insetFrame.width),
             timestamp: timestamp
         ) else { return }
 
-        let baseOffset = Double(controller.workspaceManager.niriViewportState(for: wsId).viewOffsetPixels.current())
+        let baseOffset = Double(controller.workspaceManager.niriViewportState(for: wsId).viewOffset)
 
         var selectedWindow: NiriWindow?
         controller.workspaceManager.withNiriViewportState(for: wsId) { endState in
             endState.endGesture(
                 currentOffset: baseOffset + sample.relativeOffset,
                 projectedOffset: baseOffset + sample.relativeProjectedOffset,
-                velocity: sample.velocity,
                 columns: columns,
                 gap: gap,
                 viewportWidth: insetFrame.width,
@@ -1212,15 +1212,14 @@ final class MouseEventHandler {
                 alwaysCenterSingleColumn: engine.alwaysCenterSingleColumn,
                 workingArea: insetFrame,
                 viewFrame: monitor.frame,
-                scale: scale,
-                timestamp: timestamp
+                scale: scale
             )
             selectedWindow = syncViewportSelectionToActiveColumn(columns: columns, state: &endState)
         }
         if let selectedWindow {
             rememberViewportFocusAnchor(selectedWindow, engine: engine, wsId: wsId)
         }
-        if controller.workspaceManager.niriViewportState(for: wsId).viewOffsetPixels.isAnimating {
+        if controller.workspaceManager.animationDriver.hasMotion(in: wsId) {
             controller.layoutRefreshController.startScrollAnimation(for: wsId)
         } else {
             controller.layoutRefreshController.requestImmediateRelayout(reason: .interactiveGesture)
@@ -1246,12 +1245,11 @@ final class MouseEventHandler {
 
     private func cancelCommittedGestureViewportState(for wsId: WorkspaceDescriptor.ID) {
         guard let controller else { return }
-        let relativeOffset = controller.workspaceManager.animationDriver.cancelGesture(in: wsId)
-        guard relativeOffset != nil
-            || controller.workspaceManager.niriViewportState(for: wsId).viewOffsetPixels.isAnimating
-        else { return }
+        let driver = controller.workspaceManager.animationDriver
+        let semanticOffset = controller.workspaceManager.niriViewportState(for: wsId).viewOffset
+        guard let liveOffset = driver.liveViewOffset(in: wsId, semanticOffset: semanticOffset) else { return }
         controller.workspaceManager.withNiriViewportState(for: wsId) { vstate in
-            vstate.viewOffsetPixels = .static(vstate.viewOffsetPixels.current() + CGFloat(relativeOffset ?? 0))
+            vstate.jumpOffset(to: liveOffset)
             vstate.selectionProgress = 0.0
             vstate.viewOffsetToRestore = nil
             vstate.activatePrevColumnOnRemoval = nil

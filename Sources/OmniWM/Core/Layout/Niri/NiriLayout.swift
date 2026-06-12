@@ -193,7 +193,7 @@ extension NiriLayoutEngine {
             runningPos += span + primaryGap
         }
 
-        let viewOffset = viewOffsetOverride ?? state.viewOffsetPixels.value(at: time)
+        let viewOffset = viewOffsetOverride ?? state.viewOffset
         let activeIdx = state.activeColumnIndex.clamped(to: 0 ... max(0, containers.count - 1))
         let activePos = containers.isEmpty ? 0 : containerPositions[activeIdx]
         let viewPos = activePos + viewOffset

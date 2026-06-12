@@ -6,18 +6,14 @@ final class ViewportStateConflictTests: XCTestCase {
         selectedNodeId: NodeId? = nil,
         activeColumnIndex: Int = 0,
         selectionProgress: CGFloat = 0,
-        viewOffsetPixels: ViewOffset = .static(0)
+        viewOffset: CGFloat = 0
     ) -> ViewportState {
         var state = ViewportState()
         state.selectedNodeId = selectedNodeId
         state.activeColumnIndex = activeColumnIndex
         state.selectionProgress = selectionProgress
-        state.viewOffsetPixels = viewOffsetPixels
+        state.viewOffset = viewOffset
         return state
-    }
-
-    private func spring(to target: Double = 100) -> SpringAnimation {
-        SpringAnimation(from: 0, to: target, startTime: 1.0)
     }
 
     func testResolveCommitConflictsRebasesSelectionOntoCurrentWhenStale() {
@@ -31,13 +27,13 @@ final class ViewportStateConflictTests: XCTestCase {
             selectedNodeId: NodeId(),
             activeColumnIndex: 1,
             selectionProgress: 0.25,
-            viewOffsetPixels: .static(42)
+            viewOffset: 42
         )
         next.resolveCommitConflicts(against: current, hasStaleSelection: true)
         XCTAssertEqual(next.selectedNodeId, currentNodeId)
         XCTAssertEqual(next.activeColumnIndex, 4)
         XCTAssertEqual(next.selectionProgress, 0.5)
-        XCTAssertEqual(next.viewOffsetPixels, .static(42))
+        XCTAssertEqual(next.viewOffset, 42)
     }
 
     func testResolveCommitConflictsPreservesLocalSelectionWhenCurrent() {
@@ -46,15 +42,6 @@ final class ViewportStateConflictTests: XCTestCase {
         var next = state(selectedNodeId: localNodeId, activeColumnIndex: 1)
         next.resolveCommitConflicts(against: current, hasStaleSelection: false)
         XCTAssertEqual(next.selectedNodeId, localNodeId)
-        XCTAssertEqual(next.activeColumnIndex, 1)
-    }
-
-    func testResolveCommitConflictsKeepsLocalSpringOverCurrentSpring() {
-        let localAnimation = spring(to: 50)
-        let current = state(activeColumnIndex: 6, viewOffsetPixels: .spring(spring(to: 200)))
-        var next = state(activeColumnIndex: 1, viewOffsetPixels: .spring(localAnimation))
-        next.resolveCommitConflicts(against: current, hasStaleSelection: false)
-        XCTAssertEqual(next.viewOffsetPixels, .spring(localAnimation))
         XCTAssertEqual(next.activeColumnIndex, 1)
     }
 
@@ -69,7 +56,7 @@ final class ViewportStateConflictTests: XCTestCase {
         var committed = ViewportState()
         committed.selectedNodeId = NodeId()
         committed.activeColumnIndex = 5
-        committed.viewOffsetPixels = .static(33)
+        committed.viewOffset = 33
 
         let snapshot = ReconcileSnapshot(
             topologyProfile: TopologyProfile(monitors: [Monitor.fallback()]),
@@ -95,7 +82,7 @@ final class ViewportStateConflictTests: XCTestCase {
         }
         XCTAssertEqual(staleState.selectedNodeId, liveNodeId)
         XCTAssertEqual(staleState.activeColumnIndex, 2)
-        XCTAssertEqual(staleState.viewOffsetPixels, .static(33))
+        XCTAssertEqual(staleState.viewOffset, 33)
 
         let currentPlan = StateReducer.reduce(
             event: .viewportCommitted(

@@ -5,7 +5,6 @@ extension ViewportState {
     mutating func endGesture(
         currentOffset: Double,
         projectedOffset: Double,
-        velocity: Double,
         columns: [NiriContainer],
         gap: CGFloat,
         viewportWidth: CGFloat,
@@ -15,11 +14,8 @@ extension ViewportState {
         alwaysCenterSingleColumn: Bool = false,
         workingArea: CGRect? = nil,
         viewFrame: CGRect? = nil,
-        scale: CGFloat = 2.0,
-        timestamp: TimeInterval? = nil
+        scale: CGFloat = 2.0
     ) {
-        let now = timestamp ?? CACurrentMediaTime()
-
         guard !columns.isEmpty else {
             endGestureWithoutSnap(currentOffset: currentOffset)
             return
@@ -87,21 +83,14 @@ extension ViewportState {
             : correctedTargetOffset
 
         guard motion.animationsEnabled else {
-            viewOffsetPixels = .static(CGFloat(targetOffset))
+            jumpOffset(to: CGFloat(targetOffset))
             activatePrevColumnOnRemoval = nil
             selectionProgress = 0.0
             return
         }
 
-        let animation = SpringAnimation(
-            from: currentOffset + Double(offsetDelta),
-            to: targetOffset,
-            initialVelocity: velocity,
-            startTime: now,
-            config: springConfig,
-            displayRefreshRate: displayRefreshRate
-        )
-        viewOffsetPixels = .spring(animation)
+        rebaseOffset(by: offsetDelta)
+        springOffset(to: CGFloat(targetOffset))
 
         activatePrevColumnOnRemoval = nil
         selectionProgress = 0.0
@@ -370,7 +359,7 @@ extension ViewportState {
             activeColumnIndex = preservedOffset.normalizedActiveColumn
         }
 
-        viewOffsetPixels = .static(CGFloat(finalOffset))
+        jumpOffset(to: CGFloat(finalOffset))
         activatePrevColumnOnRemoval = nil
         selectionProgress = 0.0
     }
@@ -464,7 +453,7 @@ extension ViewportState {
     }
 
     private mutating func endGestureWithoutSnap(currentOffset: Double) {
-        viewOffsetPixels = .static(CGFloat(currentOffset))
+        jumpOffset(to: CGFloat(currentOffset))
         activatePrevColumnOnRemoval = nil
         viewOffsetToRestore = nil
         selectionProgress = 0.0

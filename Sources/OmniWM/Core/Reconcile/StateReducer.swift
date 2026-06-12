@@ -301,10 +301,13 @@ enum StateReducer {
             setFocusSession(focusSession, current: currentSnapshot.focusSession, plan: &plan)
 
         case let .viewportChanged(workspaceId, state, _):
-            setViewport(state, for: workspaceId, currentSnapshot: currentSnapshot, plan: &plan)
+            var viewport = state
+            viewport.clearOffsetTransition()
+            setViewport(viewport, for: workspaceId, currentSnapshot: currentSnapshot, plan: &plan)
 
         case let .viewportCommitted(workspaceId, state, plannedSeq, _):
             var viewport = state
+            viewport.clearOffsetTransition()
             viewport.resolveCommitConflicts(
                 against: currentSnapshot.viewports[workspaceId] ?? ViewportState(),
                 hasStaleSelection: currentSnapshot.selectionSeqs[workspaceId, default: 0] > plannedSeq

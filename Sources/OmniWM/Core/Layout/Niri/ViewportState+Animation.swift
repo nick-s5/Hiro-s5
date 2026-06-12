@@ -3,45 +3,19 @@ import Foundation
 
 extension ViewportState {
     func viewPosPixels(columns: [NiriContainer], gap: CGFloat) -> CGFloat {
-        let activeColX = columnX(at: activeColumnIndex, columns: columns, gap: gap)
-        return activeColX + viewOffsetPixels.current()
+        columnX(at: activeColumnIndex, columns: columns, gap: gap) + viewOffset
     }
 
     func targetViewPosPixels(columns: [NiriContainer], gap: CGFloat) -> CGFloat {
-        let activeColX = columnX(at: activeColumnIndex, columns: columns, gap: gap)
-        return activeColX + viewOffsetPixels.target()
+        viewPosPixels(columns: columns, gap: gap)
     }
 
     func currentViewOffset() -> CGFloat {
-        viewOffsetPixels.current()
+        viewOffset
     }
 
     func stationary() -> CGFloat {
-        switch viewOffsetPixels {
-        case .static(let offset):
-            return offset
-        case .spring(let anim):
-            return CGFloat(anim.target)
-        }
-    }
-
-    mutating func advanceAnimations(at time: CFTimeInterval) -> Bool {
-        return tickAnimation(at: time)
-    }
-
-    mutating func tickAnimation(at time: CFTimeInterval = CACurrentMediaTime()) -> Bool {
-        switch viewOffsetPixels {
-        case let .spring(anim):
-            if anim.isComplete(at: time) {
-                let finalOffset = CGFloat(anim.target)
-                viewOffsetPixels = .static(finalOffset)
-                return false
-            }
-            return true
-
-        case .static:
-            return false
-        }
+        viewOffset
     }
 
     mutating func animateToOffset(
@@ -52,82 +26,50 @@ extension ViewportState {
         scale: CGFloat = 2.0
     ) {
         guard motion.animationsEnabled else {
-            viewOffsetPixels = .static(offset)
+            jumpOffset(to: offset)
             return
         }
 
-        let now = clock?.now() ?? CACurrentMediaTime()
         let pixel: CGFloat = 1.0 / scale
-
-        let toDiff = offset - viewOffsetPixels.target()
+        let toDiff = offset - viewOffset
         if abs(toDiff) < pixel {
-            viewOffsetPixels.offset(delta: Double(toDiff))
+            rebaseOffset(by: toDiff)
             return
         }
 
-        let currentOffset = viewOffsetPixels.current()
-        let velocity = viewOffsetPixels.currentVelocity()
-
-        let animation = SpringAnimation(
-            from: Double(currentOffset),
-            to: Double(offset),
-            initialVelocity: velocity,
-            startTime: now,
-            config: config ?? springConfig,
-            displayRefreshRate: displayRefreshRate
-        )
-        viewOffsetPixels = .spring(animation)
+        springOffset(to: offset, config: config)
     }
 
     mutating func cancelAnimation() {
-        viewOffsetPixels = .static(viewOffsetPixels.target())
-    }
-
-    mutating func settleAtCurrentOffset() {
-        viewOffsetPixels = .static(viewOffsetPixels.current())
+        jumpOffset(to: viewOffset)
     }
 
     mutating func reset() {
         activeColumnIndex = 0
-        viewOffsetPixels = .static(0.0)
+        jumpOffset(to: 0.0)
         selectionProgress = 0.0
         selectedNodeId = nil
     }
 
     mutating func offsetViewport(by delta: CGFloat) {
-        let current = viewOffsetPixels.current()
-        viewOffsetPixels = .static(current + delta)
+        jumpOffset(to: viewOffset + delta)
     }
 
     mutating func saveViewOffsetForFullscreen() {
-        viewOffsetToRestore = stationary()
+        viewOffsetToRestore = viewOffset
     }
 
     mutating func restoreViewOffset(_ offset: CGFloat) {
-        viewOffsetPixels = .static(offset)
+        jumpOffset(to: offset)
         viewOffsetToRestore = nil
     }
 
     mutating func animateViewOffsetRestore(_ offset: CGFloat, motion: MotionSnapshot, clock: AnimationClock?) {
-        guard motion.animationsEnabled else {
-            viewOffsetPixels = .static(offset)
-            viewOffsetToRestore = nil
-            return
+        if motion.animationsEnabled {
+            springOffset(to: offset)
+        } else {
+            jumpOffset(to: offset)
         }
-
-        let now = clock?.now() ?? CACurrentMediaTime()
-        let currentOffset = viewOffsetPixels.current()
-        let velocity = viewOffsetPixels.currentVelocity()
-
-        let animation = SpringAnimation(
-            from: Double(currentOffset),
-            to: Double(offset),
-            initialVelocity: velocity,
-            startTime: now,
-            config: springConfig,
-            displayRefreshRate: displayRefreshRate
-        )
-        viewOffsetPixels = .spring(animation)
         viewOffsetToRestore = nil
     }
 

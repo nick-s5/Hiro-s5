@@ -2,12 +2,14 @@ import AppKit
 import Foundation
 import QuartzCore
 
-private func hasPendingNiriAnimationWork(
+@MainActor private func hasPendingNiriAnimationWork(
     state: ViewportState,
+    driver: AnimationDriver,
     engine: NiriLayoutEngine,
     workspaceId: WorkspaceDescriptor.ID
 ) -> Bool {
-    state.viewOffsetPixels.isAnimating
+    state.hasPendingSpringTransition
+        || driver.hasMotion(in: workspaceId)
         || engine.hasAnyWindowAnimationsRunning(in: workspaceId)
         || engine.hasAnyColumnAnimationsRunning(in: workspaceId)
 }
@@ -61,7 +63,12 @@ enum NiriWindowMoveResult {
         engine: NiriLayoutEngine
     ) {
         guard let controller else { return }
-        guard hasPendingNiriAnimationWork(state: state, engine: engine, workspaceId: workspaceId) else {
+        guard hasPendingNiriAnimationWork(
+            state: state,
+            driver: controller.workspaceManager.animationDriver,
+            engine: engine,
+            workspaceId: workspaceId
+        ) else {
             return
         }
         controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
@@ -99,18 +106,15 @@ enum NiriWindowMoveResult {
         let windowAnimationsRunning = engine.tickAllWindowAnimations(in: wsId, at: targetTime)
         let columnAnimationsRunning = engine.tickAllColumnAnimations(in: wsId, at: targetTime)
 
-        var state = controller.workspaceManager.niriViewportState(for: wsId)
-        let offsetBeforeTick = state.viewOffsetPixels
-        let viewportAnimationRunning = state.advanceAnimations(at: targetTime)
-        let gestureRunning = controller.workspaceManager.animationDriver.hasGesture(in: wsId)
+        let viewportMotionRunning = controller.workspaceManager.animationDriver.tick(in: wsId, at: targetTime)
+        let state = controller.workspaceManager.niriViewportState(for: wsId)
 
         let didApplyFrames = applyFramesOnDemand(
             wsId: wsId,
             state: state,
             engine: engine,
             monitor: monitor,
-            animationTime: targetTime,
-            commitViewport: offsetBeforeTick != state.viewOffsetPixels
+            animationTime: targetTime
         )
         guard didApplyFrames else {
             controller.layoutRefreshController.requestRelayout(
@@ -119,10 +123,9 @@ enum NiriWindowMoveResult {
             )
             return
         }
-        let animationsOngoing = viewportAnimationRunning
+        let animationsOngoing = viewportMotionRunning
             || windowAnimationsRunning
             || columnAnimationsRunning
-            || gestureRunning
 
         if !animationsOngoing {
             applyFramesOnDemand(
@@ -149,8 +152,7 @@ enum NiriWindowMoveResult {
         state: ViewportState,
         engine: NiriLayoutEngine,
         monitor: Monitor,
-        animationTime: TimeInterval? = nil,
-        commitViewport: Bool = false
+        animationTime: TimeInterval? = nil
     ) -> Bool {
         guard let controller,
               let activeWorkspaceId = controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id,
@@ -170,8 +172,7 @@ enum NiriWindowMoveResult {
             snapshot: snapshot,
             engine: engine,
             monitor: monitor,
-            animationTime: animationTime,
-            commitViewport: commitViewport
+            animationTime: animationTime
         )
         return controller.layoutRefreshController.executeLayoutPlan(plan)
     }
@@ -334,8 +335,7 @@ enum NiriWindowMoveResult {
         snapshot: NiriWorkspaceSnapshot,
         engine: NiriLayoutEngine,
         monitor: Monitor,
-        animationTime: TimeInterval?,
-        commitViewport: Bool = false
+        animationTime: TimeInterval?
     ) -> WorkspaceLayoutPlan {
         let gaps = LayoutGaps(
             horizontal: snapshot.gap,
@@ -356,9 +356,10 @@ enum NiriWindowMoveResult {
             state: snapshot.viewportState,
             workingArea: area,
             animationTime: animationTime,
-            viewOffsetOverride: controller?.workspaceManager.animationDriver.gestureLiveOffset(
+            viewOffsetOverride: controller?.workspaceManager.animationDriver.liveViewOffset(
                 in: snapshot.workspaceId,
-                semanticOffset: snapshot.viewportState.viewOffsetPixels.current()
+                semanticOffset: snapshot.viewportState.viewOffset,
+                at: animationTime ?? CACurrentMediaTime()
             )
         )
 
@@ -376,7 +377,7 @@ enum NiriWindowMoveResult {
             plannedSeq: snapshot.plannedSeq,
             sessionPatch: WorkspaceSessionPatch(
                 workspaceId: snapshot.workspaceId,
-                viewportState: commitViewport ? snapshot.viewportState : nil,
+                viewportState: nil,
                 plannedSeq: snapshot.plannedSeq
             ),
             diff: diff,
@@ -565,7 +566,7 @@ enum NiriWindowMoveResult {
                 let totalInsertedWidth = insertedBeforeActive.reduce(CGFloat(0)) { total, data in
                     total + data.col.cachedWidth + pass.gap
                 }
-                state.viewOffsetPixels.offset(delta: Double(-totalInsertedWidth))
+                state.rebaseOffset(by: -totalInsertedWidth)
                 state.activeColumnIndex = originalActiveIdx + insertedBeforeActive.count
             }
 
@@ -620,11 +621,11 @@ enum NiriWindowMoveResult {
             resetViewportForSingleWindowAspectRatio(state: &state)
         }
 
-        let offsetBefore = state.viewOffsetPixels.current()
+        let offsetBefore = state.viewOffset
+        let rebaseDeltaBefore = state.offsetTransition.rebaseDelta
         var viewportNeedsRecalc = removal.removalResult.viewportNeedsRecalc
 
-        let isGestureOrAnimation = controller?.workspaceManager.animationDriver.hasGesture(in: pass.wsId) == true
-            || state.viewOffsetPixels.isAnimating
+        let isGestureOrAnimation = controller?.workspaceManager.animationDriver.hasMotion(in: pass.wsId) == true
 
         resolveColumnWidthsIfNeeded(pass: pass)
 
@@ -645,8 +646,10 @@ enum NiriWindowMoveResult {
                 gaps: pass.gap,
                 fromContainerIndex: removal.removalResult.fromIndexForVisibility
             )
-            let validationOffsetAfter = state.viewOffsetPixels.current()
-            if abs(validationOffsetAfter - offsetBefore) > 1 {
+            let liveOffsetDelta = state.hasPendingSpringTransition
+                ? state.offsetTransition.rebaseDelta - rebaseDeltaBefore
+                : state.viewOffset - offsetBefore
+            if abs(liveOffsetDelta) > 1 {
                 viewportNeedsRecalc = true
             }
         }
@@ -802,7 +805,7 @@ enum NiriWindowMoveResult {
         if let viewOrigin {
             restoreViewOrigin(viewOrigin, pass: pass, state: &state)
         } else {
-            state.viewOffsetPixels = .static(state.viewOffsetPixels.current())
+            state.jumpOffset(to: state.viewOffset)
         }
     }
 
@@ -826,12 +829,12 @@ enum NiriWindowMoveResult {
         let activeColumnIndex = state.activeColumnIndex.clamped(to: 0 ... columns.count - 1)
         state.activeColumnIndex = activeColumnIndex
         let activeColumnX = state.columnX(at: activeColumnIndex, columns: columns, gap: pass.gap)
-        state.viewOffsetPixels = .static(viewOrigin - activeColumnX)
+        state.jumpOffset(to: viewOrigin - activeColumnX)
     }
 
     private func resetViewportForSingleWindowAspectRatio(state: inout ViewportState) {
         state.activeColumnIndex = 0
-        state.viewOffsetPixels = .static(0)
+        state.jumpOffset(to: 0)
         state.activatePrevColumnOnRemoval = nil
         state.viewOffsetToRestore = nil
         state.selectionProgress = 0
@@ -867,10 +870,13 @@ enum NiriWindowMoveResult {
             state: state,
             workingArea: area,
             animationTime: nil,
-            viewOffsetOverride: controller?.workspaceManager.animationDriver.gestureLiveOffset(
-                in: pass.wsId,
-                semanticOffset: state.viewOffsetPixels.current()
-            )
+            viewOffsetOverride: controller.map {
+                $0.workspaceManager.animationDriver.plannedRenderOffset(
+                    in: pass.wsId,
+                    localState: state,
+                    storeOffset: $0.workspaceManager.niriViewportState(for: pass.wsId).viewOffset
+                )
+            }
         )
 
         let hasColumnAnimations = pass.engine.hasAnyColumnAnimationsRunning(in: pass.wsId)
@@ -1142,7 +1148,9 @@ enum NiriWindowMoveResult {
             )
         )
         let updatedState = controller.workspaceManager.niriViewportState(for: workspaceId)
-        if updatedState.viewOffsetPixels.isAnimating || engine.hasAnyWindowAnimationsRunning(in: workspaceId) {
+        if controller.workspaceManager.animationDriver.hasMotion(in: workspaceId)
+            || engine.hasAnyWindowAnimationsRunning(in: workspaceId)
+        {
             controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
         }
     }
@@ -1600,14 +1608,14 @@ enum NiriWindowMoveResult {
                     controller?.focusWindow(focusToken, origin: options.focusOrigin)
                 }
             }
-            if options.startAnimation, state.viewOffsetPixels.isAnimating {
+            if options.startAnimation, state.hasPendingSpringTransition {
                 controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
             }
         } else {
             if options.axFocus, let windowNode = node as? NiriWindow {
                 controller.focusWindow(windowNode.token, origin: options.focusOrigin)
             }
-            if options.startAnimation, state.viewOffsetPixels.isAnimating {
+            if options.startAnimation, state.hasPendingSpringTransition {
                 controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
             }
         }
@@ -1686,7 +1694,7 @@ enum NiriWindowMoveResult {
             gap: gap,
             sizeKeyPath: sizeKeyPath
         )
-        state.viewOffsetPixels.offset(delta: Double(previousPosition - targetPosition))
+        state.rebaseOffset(by: previousPosition - targetPosition)
         state.activeColumnIndex = targetIndex
     }
 
@@ -1969,7 +1977,12 @@ struct NodeActivationOptions {
     let gaps: CGFloat
 
     private func hasPendingAnimationWork(state: ViewportState) -> Bool {
-        hasPendingNiriAnimationWork(state: state, engine: engine, workspaceId: wsId)
+        hasPendingNiriAnimationWork(
+            state: state,
+            driver: controller.workspaceManager.animationDriver,
+            engine: engine,
+            workspaceId: wsId
+        )
     }
 
     private func requestLayoutCommandRelayout() {

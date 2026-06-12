@@ -2372,8 +2372,7 @@ final class AXEventHandler {
             let preferredFrame = node.renderedFrame ?? node.frame
             preferredMouseFrame = preferredFrame
             var state = controller.workspaceManager.niriViewportState(for: wsId)
-            let preserveActiveViewport = controller.workspaceManager.animationDriver.hasGesture(in: wsId)
-                || state.viewOffsetPixels.isAnimating
+            let preserveActiveViewport = controller.workspaceManager.animationDriver.hasMotion(in: wsId)
             let preserveReplacementViewport = isProtectedManagedReplacementFocus(
                 token: entry.token,
                 workspaceId: wsId

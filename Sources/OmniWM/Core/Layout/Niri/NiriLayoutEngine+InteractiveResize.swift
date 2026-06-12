@@ -201,7 +201,7 @@ extension NiriLayoutEngine {
             if resize.edges.contains(.left), let origOffset = resize.originalViewOffset {
                 let widthDelta = column.cachedWidth - originalWidth
                 viewportState { state in
-                    state.viewOffsetPixels = .static(origOffset + widthDelta)
+                    state.jumpOffset(to: origOffset + widthDelta)
                 }
             }
         }

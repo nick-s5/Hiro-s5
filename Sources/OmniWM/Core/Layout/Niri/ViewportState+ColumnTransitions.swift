@@ -28,14 +28,14 @@ extension ViewportState {
         let newActiveColX = columnX(at: clampedIndex, columns: columns, gap: gap)
         let offsetDelta = oldActiveColX - newActiveColX
 
-        viewOffsetPixels.offset(delta: Double(offsetDelta))
+        rebaseOffset(by: offsetDelta)
 
         let targetOffset = computeVisibleOffset(
             columnIndex: clampedIndex,
             columns: columns,
             gap: gap,
             viewportWidth: viewportWidth,
-            currentOffset: viewOffsetPixels.target(),
+            currentOffset: viewOffset,
             centerMode: centerMode,
             alwaysCenterSingleColumn: alwaysCenterSingleColumn,
             fromColumnIndex: fromColumnIndex ?? prevActiveColumn,
@@ -45,9 +45,9 @@ extension ViewportState {
         )
 
         let pixel: CGFloat = 1.0 / max(scale, 1.0)
-        let toDiff = targetOffset - viewOffsetPixels.target()
+        let toDiff = targetOffset - viewOffset
         if abs(toDiff) < pixel {
-            viewOffsetPixels.offset(delta: Double(toDiff))
+            rebaseOffset(by: toDiff)
             activatePrevColumnOnRemoval = nil
             viewOffsetToRestore = nil
             return
@@ -56,7 +56,7 @@ extension ViewportState {
         if animate {
             animateToOffset(targetOffset, motion: motion, clock: clock)
         } else {
-            viewOffsetPixels = .static(targetOffset)
+            jumpOffset(to: targetOffset)
         }
 
         activatePrevColumnOnRemoval = nil
@@ -122,7 +122,7 @@ extension ViewportState {
                 scale: scale
             )
         } else {
-            viewOffsetPixels = .static(targetOffset)
+            jumpOffset(to: targetOffset)
         }
     }
 }

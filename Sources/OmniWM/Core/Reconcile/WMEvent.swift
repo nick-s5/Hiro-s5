@@ -420,7 +420,7 @@ enum WMEvent: Equatable {
         case let .layoutOperationPerformed(workspaceId, operation, _):
             "layout_operation workspace=\(workspaceId.uuidString) op=\(operation.summary)"
         case let .viewportChanged(workspaceId, state, _):
-            "viewport_changed workspace=\(workspaceId.uuidString) selected=\(state.selectedNodeId.map(String.init(describing:)) ?? "nil") column=\(state.activeColumnIndex) target=\(state.viewOffsetPixels.target())"
+            "viewport_changed workspace=\(workspaceId.uuidString) selected=\(state.selectedNodeId.map(String.init(describing:)) ?? "nil") column=\(state.activeColumnIndex) target=\(state.viewOffset)"
         case let .viewportCommitted(workspaceId, state, plannedSeq, _):
             "viewport_committed workspace=\(workspaceId.uuidString) selected=\(state.selectedNodeId.map(String.init(describing:)) ?? "nil") column=\(state.activeColumnIndex) planned_seq=\(plannedSeq)"
         case let .viewportForgotten(workspaceIds, _):

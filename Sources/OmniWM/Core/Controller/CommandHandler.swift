@@ -283,7 +283,7 @@ final class CommandHandler {
         )
         controller.niriLayoutHandler.requestSelectedWindowFocusAfterLayout(in: wsId)
 
-        if state.viewOffsetPixels.isAnimating {
+        if controller.workspaceManager.animationDriver.hasMotion(in: wsId) {
             controller.layoutRefreshController.startScrollAnimation(for: wsId)
         }
     }

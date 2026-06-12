@@ -41,7 +41,7 @@ extension NiriLayoutEngine {
 
         if removedIdx < activeIdx {
             state.activeColumnIndex = activeIdx - 1
-            state.viewOffsetPixels.offset(delta: Double(offset))
+            state.rebaseOffset(by: offset)
             state.activatePrevColumnOnRemoval = nil
             return ColumnRemovalResult(
                 fallbackSelectionId: fallback,
@@ -324,7 +324,7 @@ extension NiriLayoutEngine {
 
         let totalColumnsWidth = cols.reduce(0) { $0 + $1.cachedWidth } + CGFloat(max(0, cols.count - 1)) * gaps
 
-        let targetViewOffset = state.viewOffsetPixels.target()
+        let targetViewOffset = state.viewOffset
         let alwaysCenterSingleColumn = effectiveAlwaysCenterSingleColumn(in: workspaceId)
 
         let centeringOffset: CGFloat = if totalColumnsWidth < workingFrame.width {

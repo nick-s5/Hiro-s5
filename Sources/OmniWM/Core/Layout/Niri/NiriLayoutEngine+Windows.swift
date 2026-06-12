@@ -37,7 +37,7 @@ extension NiriLayoutEngine {
             return [:]
         }
 
-        let viewOffset = state.viewOffsetPixels.current()
+        let viewOffset = state.viewOffset
         let viewLeft = -viewOffset
         let viewRight = viewLeft + workingFrame.width
 
@@ -443,7 +443,7 @@ extension NiriLayoutEngine {
             state.selectedNodeId = nil
         } else if removedIdx < activeIdx {
             state.activeColumnIndex = activeIdx - 1
-            state.viewOffsetPixels.offset(delta: Double(offset))
+            state.rebaseOffset(by: offset)
             state.activatePrevColumnOnRemoval = nil
             viewportNeedsRecalc = true
             fallbackSelectionId = fallbackSelectionFromActiveColumn(
@@ -457,7 +457,7 @@ extension NiriLayoutEngine {
         {
             state.activeColumnIndex = activeIdx - 1
             state.activatePrevColumnOnRemoval = nil
-            state.viewOffsetPixels = .static(previousOffset)
+            state.jumpOffset(to: previousOffset)
             viewportNeedsRecalc = true
             fallbackSelectionId = fallbackSelectionFromActiveColumn(
                 in: workspaceId,

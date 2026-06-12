@@ -214,7 +214,7 @@ extension NiriLayoutEngine {
             sizeKeyPath: sizeKeyPath
         )
         let offsetDelta = oldActivePos - newActivePos
-        state.viewOffsetPixels.offset(delta: Double(offsetDelta))
+        state.rebaseOffset(by: offsetDelta)
 
         state.activeColumnIndex = targetIdx
         state.activatePrevColumnOnRemoval = nil

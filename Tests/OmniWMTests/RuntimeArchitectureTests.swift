@@ -2079,7 +2079,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         var state = controller.workspaceManager.niriViewportState(for: workspaceId)
         state.selectedNodeId = firstNode.id
         state.activeColumnIndex = 0
-        state.viewOffsetPixels = .static(-16.0)
+        state.viewOffset = -16.0
 
         controller.niriLayoutHandler.activateNode(
             secondNode,
@@ -2097,8 +2097,8 @@ final class RuntimeArchitectureTests: XCTestCase {
 
         XCTAssertEqual(state.selectedNodeId, secondNode.id)
         XCTAssertEqual(state.activeColumnIndex, 0)
-        XCTAssertEqual(state.viewOffsetPixels.current(), -16.0, accuracy: 0.001)
-        XCTAssertFalse(state.viewOffsetPixels.isAnimating)
+        XCTAssertEqual(state.viewOffset, -16.0, accuracy: 0.001)
+        XCTAssertFalse(state.hasPendingSpringTransition)
     }
 
     @MainActor
@@ -2153,7 +2153,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         let viewOrigin = targetColumnX - (monitor.visibleFrame.width - columnWidth) / 2
         state.selectedNodeId = selectedNode.id
         state.activeColumnIndex = 1
-        state.viewOffsetPixels = .static(viewOrigin - targetColumnX)
+        state.viewOffset = viewOrigin - targetColumnX
         _ = controller.workspaceManager.applySessionPatch(
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
@@ -2234,7 +2234,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         let selectedNode = try XCTUnwrap(initialColumns[0].windowNodes.first)
         state.selectedNodeId = selectedNode.id
         state.activeColumnIndex = 0
-        state.viewOffsetPixels = .static(0)
+        state.viewOffset = 0
         _ = controller.workspaceManager.applySessionPatch(
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
@@ -2297,7 +2297,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         var state = controller.workspaceManager.niriViewportState(for: workspaceId)
         state.selectedNodeId = existingNode.id
         state.activeColumnIndex = 0
-        state.viewOffsetPixels = .static(0)
+        state.viewOffset = 0
         _ = controller.workspaceManager.applySessionPatch(
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
@@ -2403,7 +2403,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         let viewOrigin = selectedColumnX - (monitor.visibleFrame.width - columnWidth) / 2
         state.selectedNodeId = oldNode.id
         state.activeColumnIndex = 1
-        state.viewOffsetPixels = .static(viewOrigin - selectedColumnX)
+        state.viewOffset = viewOrigin - selectedColumnX
         _ = controller.workspaceManager.applySessionPatch(
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
@@ -2453,7 +2453,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertFalse(plan.animationDirectives.containsStartNiriScroll(for: workspaceId))
         XCTAssertFalse(engine.hasAnyColumnAnimationsRunning(in: workspaceId))
         XCTAssertFalse(engine.hasAnyWindowAnimationsRunning(in: workspaceId))
-        XCTAssertFalse(patchedState.viewOffsetPixels.isAnimating)
+        XCTAssertFalse(patchedState.hasPendingSpringTransition)
         XCTAssertEqual(patchedViewOrigin, viewOrigin, accuracy: 0.001)
         XCTAssertEqual(patchedState.selectedNodeId, newNode.id)
     }
@@ -2823,7 +2823,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         )
         state.selectedNodeId = selectedNode.id
         state.activeColumnIndex = position.targetColumnIndex
-        state.viewOffsetPixels = .static(viewOrigin - targetColumnX)
+        state.viewOffset = viewOrigin - targetColumnX
         _ = controller.workspaceManager.applySessionPatch(
             WorkspaceSessionPatch(
                 workspaceId: workspaceId,
@@ -2861,7 +2861,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         let patchedViewOrigin = patchedState.viewPosPixels(columns: finalColumns, gap: gap)
 
         XCTAssertEqual(patchedViewOrigin, viewOrigin, accuracy: 0.001, file: file, line: line)
-        XCTAssertFalse(patchedState.viewOffsetPixels.isAnimating, file: file, line: line)
+        XCTAssertFalse(patchedState.hasPendingSpringTransition, file: file, line: line)
         XCTAssertEqual(patchedState.selectedNodeId, newTabNode.id, file: file, line: line)
         XCTAssertEqual(
             finalColumns[position.targetColumnIndex].activeWindow?.token,
