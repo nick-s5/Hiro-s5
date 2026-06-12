@@ -12,7 +12,6 @@ final class DwindleLayoutEngine {
     var settings: DwindleSettings = DwindleSettings()
     private var monitorSettings: [Monitor.ID: ResolvedDwindleSettings] = [:]
     var animationClock: AnimationClock?
-    var displayRefreshRate: Double = 60.0
 
     func updateWindowConstraints(for token: WindowToken, constraints: WindowSizeConstraints) {
         windowConstraints[token] = constraints.normalized()

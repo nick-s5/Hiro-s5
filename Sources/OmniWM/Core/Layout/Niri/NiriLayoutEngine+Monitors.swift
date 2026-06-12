@@ -73,6 +73,10 @@ extension NiriLayoutEngine {
         monitorForWorkspace(workspaceId)?.scale ?? 2.0
     }
 
+    func displayRefreshRate(in workspaceId: WorkspaceDescriptor.ID) -> Double {
+        monitorForWorkspace(workspaceId)?.refreshRate ?? 60.0
+    }
+
     func effectiveMaxVisibleColumns(for monitorId: Monitor.ID) -> Int {
         effectiveSettings(for: monitorId).maxVisibleColumns
     }

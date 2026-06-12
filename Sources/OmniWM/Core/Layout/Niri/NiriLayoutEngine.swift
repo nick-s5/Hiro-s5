@@ -140,7 +140,6 @@ final class NiriLayoutEngine {
 
     var windowMovementAnimationConfig: SpringConfig = .niriWindowMovement
     var animationClock: AnimationClock?
-    var displayRefreshRate: Double = 60.0
 
     var presetColumnWidths: [PresetSize] = NiriLayoutEngine.defaultPresetColumnWidths
     var presetWindowHeights: [PresetSize] = NiriLayoutEngine.defaultPresetWindowHeights

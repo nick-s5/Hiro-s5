@@ -408,6 +408,7 @@ extension NiriLayoutEngine {
             removedIdx: removedIdx,
             activeIdx: activeIdx,
             offset: offset,
+            in: workspaceId,
             motion: motion
         )
 

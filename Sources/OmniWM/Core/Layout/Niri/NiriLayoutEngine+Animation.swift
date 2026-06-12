@@ -32,6 +32,7 @@ extension NiriLayoutEngine {
             removedIdx: removedIdx,
             activeIdx: activeIdx,
             offset: offset,
+            in: workspaceId,
             motion: motion
         )
 
@@ -78,6 +79,7 @@ extension NiriLayoutEngine {
         removedIdx: Int,
         activeIdx: Int,
         offset: CGFloat,
+        in workspaceId: WorkspaceDescriptor.ID,
         motion: MotionSnapshot
     ) {
         guard removedIdx >= 0, removedIdx < cols.count else { return }
@@ -101,7 +103,7 @@ extension NiriLayoutEngine {
                     displacement: CGPoint(x: displacement, y: 0),
                     clock: animationClock,
                     config: windowMovementAnimationConfig,
-                    displayRefreshRate: displayRefreshRate,
+                    displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )
             }
@@ -137,7 +139,7 @@ extension NiriLayoutEngine {
                         displacement: CGPoint(x: -offset, y: 0),
                         clock: animationClock,
                         config: windowMovementAnimationConfig,
-                        displayRefreshRate: displayRefreshRate,
+                        displayRefreshRate: displayRefreshRate(in: workspaceId),
                         animated: motion.animationsEnabled
                     )
                 }
@@ -151,7 +153,7 @@ extension NiriLayoutEngine {
                         displacement: CGPoint(x: offset, y: 0),
                         clock: animationClock,
                         config: windowMovementAnimationConfig,
-                        displayRefreshRate: displayRefreshRate,
+                        displayRefreshRate: displayRefreshRate(in: workspaceId),
                         animated: motion.animationsEnabled
                     )
                 }
@@ -405,7 +407,7 @@ extension NiriLayoutEngine {
                     displacement: CGPoint(x: dx, y: dy),
                     clock: animationClock,
                     config: windowMovementAnimationConfig,
-                    displayRefreshRate: displayRefreshRate,
+                    displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )
                 anyAnimationStarted = true

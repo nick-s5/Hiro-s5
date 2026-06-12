@@ -16,13 +16,14 @@ extension NiriLayoutEngine {
         }
 
         let newMode: ColumnDisplay = column.displayMode == .normal ? .tabbed : .normal
-        return setColumnDisplay(newMode, for: column, motion: motion)
+        return setColumnDisplay(newMode, for: column, in: workspaceId, motion: motion)
     }
 
     @discardableResult
     func setColumnDisplay(
         _ mode: ColumnDisplay,
         for column: NiriContainer,
+        in workspaceId: WorkspaceDescriptor.ID,
         motion: MotionSnapshot,
         gaps: CGFloat = 0
     ) -> Bool {
@@ -65,7 +66,7 @@ extension NiriLayoutEngine {
                     displacement: delta,
                     clock: animationClock,
                     config: windowMovementAnimationConfig,
-                    displayRefreshRate: displayRefreshRate,
+                    displayRefreshRate: displayRefreshRate(in: workspaceId),
                     animated: motion.animationsEnabled
                 )
             }

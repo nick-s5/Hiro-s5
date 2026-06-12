@@ -34,6 +34,11 @@ struct Monitor: Identifiable, Hashable {
         }
     }
 
+    static func refreshRate(for displayId: CGDirectDisplayID) -> Double {
+        guard let mode = CGDisplayCopyDisplayMode(displayId), mode.refreshRate > 0 else { return 60.0 }
+        return mode.refreshRate
+    }
+
     static func fallback() -> Monitor {
         let frame = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         let displayId = NSScreen.main?.displayId ?? CGMainDisplayID()

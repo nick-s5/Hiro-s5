@@ -15,6 +15,8 @@ final class NiriMonitor {
 
     private(set) var scale: CGFloat
 
+    private(set) var refreshRate: Double
+
     private(set) var orientation: Monitor.Orientation = .horizontal
 
     var workspaceRoots: [WorkspaceDescriptor.ID: NiriRoot] = [:]
@@ -42,6 +44,7 @@ final class NiriMonitor {
         } else {
             scale = 2.0
         }
+        refreshRate = Monitor.refreshRate(for: monitor.displayId)
     }
 
     func updateOutputSize(monitor: Monitor, orientation: Monitor.Orientation? = nil) {
@@ -52,6 +55,7 @@ final class NiriMonitor {
         if let screen = NSScreen.screens.first(where: { $0.displayId == monitor.displayId }) {
             scale = screen.backingScaleFactor
         }
+        refreshRate = Monitor.refreshRate(for: monitor.displayId)
     }
 
     func updateOrientation(_ orientation: Monitor.Orientation) {

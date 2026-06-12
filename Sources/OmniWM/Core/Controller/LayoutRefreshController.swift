@@ -247,12 +247,7 @@ import QuartzCore
         layoutState.refreshRateByDisplay.removeAll()
         for screen in NSScreen.screens {
             guard let displayId = screen.displayId else { continue }
-            if let mode = CGDisplayCopyDisplayMode(displayId) {
-                let rate = mode.refreshRate > 0 ? mode.refreshRate : 60.0
-                layoutState.refreshRateByDisplay[displayId] = rate
-            } else {
-                layoutState.refreshRateByDisplay[displayId] = 60.0
-            }
+            layoutState.refreshRateByDisplay[displayId] = Monitor.refreshRate(for: displayId)
         }
     }
 
