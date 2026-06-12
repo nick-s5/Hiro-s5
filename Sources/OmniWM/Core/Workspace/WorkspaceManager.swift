@@ -198,9 +198,7 @@ final class WorkspaceManager {
 
     private(set) var gaps: Double = 8
     private(set) var outerGaps: LayoutGaps.OuterGaps = .zero
-    private let windows = WindowModel()
-    private let reconcileTrace = ReconcileTraceRecorder()
-    private lazy var runtimeStore = RuntimeStore(traceRecorder: reconcileTrace)
+    private let world = WorldStore()
     private let restorePlanner = RestorePlanner()
     private let bootPersistedWindowRestoreCatalog: PersistedWindowRestoreCatalog
     private var nativeFullscreenRecordsByOriginalToken: [WindowToken: NativeFullscreenRecord] = [:]
@@ -251,7 +249,7 @@ final class WorkspaceManager {
     }
 
     func reconcileSnapshot() -> ReconcileSnapshot {
-        let windowSnapshots = windows.allEntries()
+        let windowSnapshots = world.allEntries()
             .sorted {
                 if $0.workspaceId != $1.workspaceId {
                     return $0.workspaceId.uuidString < $1.workspaceId.uuidString
@@ -303,7 +301,7 @@ final class WorkspaceManager {
     }
 
     func reconcileTraceDump(limit: Int? = nil) -> String {
-        ReconcileDebugDump.trace(reconcileTrace.snapshot(), limit: limit)
+        ReconcileDebugDump.trace(world.traceRecords(), limit: limit)
     }
 
     func runtimeRevision(for workspaceId: WorkspaceDescriptor.ID) -> RuntimeRevision {
@@ -341,35 +339,31 @@ final class WorkspaceManager {
 
     @discardableResult
     func recordReconcileEvent(_ event: WMEvent) -> ReconcileTxn {
-        let snapshot = reconcileSnapshot()
-        let restoreEventPlan = restorePlanner.planEvent(
-            .init(
-                event: event,
-                snapshot: snapshot,
-                monitors: monitors
-            )
-        )
-        let entry = event.token.flatMap { windows.entry(for: $0) }
-        let persistedHydration = event.token.flatMap { plannedPersistedHydrationMutation(for: $0) }
-        let restoreRefresh = plannedRestoreRefresh(
-            from: restoreEventPlan,
-            snapshot: snapshot
-        )
-        let txn = runtimeStore.transact(
-            event: event,
-            existingEntry: entry,
+        let txn = world.commit(
+            event,
             monitors: monitors,
             snapshot: { self.reconcileSnapshot() },
-            applyPlan: { plan, token in
+            resolvePlan: { plan, token in
                 var plan = plan
-                if let restoreRefresh {
+                let snapshot = self.reconcileSnapshot()
+                let restoreEventPlan = self.restorePlanner.planEvent(
+                    .init(
+                        event: event,
+                        snapshot: snapshot,
+                        monitors: self.monitors
+                    )
+                )
+                if let restoreRefresh = self.plannedRestoreRefresh(
+                    from: restoreEventPlan,
+                    snapshot: snapshot
+                ) {
                     plan.restoreRefresh = restoreRefresh
                 }
-                if let persistedHydration {
+                if let token, let persistedHydration = self.plannedPersistedHydrationMutation(for: token) {
                     plan = self.mergePersistedHydration(
                         persistedHydration,
                         into: plan,
-                        existingEntry: entry
+                        existingEntry: self.world.entry(for: token)
                     )
                 }
                 if !restoreEventPlan.notes.isEmpty {
@@ -422,12 +416,11 @@ final class WorkspaceManager {
             source: .workspaceManager
         )
 
-        let txn = runtimeStore.transact(
-            event: event,
-            existingEntry: nil,
+        let txn = world.commit(
+            event,
             monitors: normalizedMonitors,
             snapshot: { self.reconcileSnapshot() },
-            applyPlan: { plan, _ in
+            resolvePlan: { plan, _ in
                 var plan = plan
                 plan.topologyTransition = TopologyTransitionPlan(
                     previousMonitors: topologyPlan.previousMonitors,
@@ -508,21 +501,21 @@ final class WorkspaceManager {
         }
 
         if let lifecyclePhase = plan.lifecyclePhase {
-            windows.setLifecyclePhase(lifecyclePhase, for: token)
+            world.setLifecyclePhase(lifecyclePhase, for: token)
         }
         if let observedState = plan.observedState {
-            windows.setObservedState(observedState, for: token)
+            world.setObservedState(observedState, for: token)
         }
         if let desiredState = plan.desiredState {
-            windows.setDesiredState(desiredState, for: token)
+            world.setDesiredState(desiredState, for: token)
         }
         if let replacementCorrelation = plan.replacementCorrelation {
-            windows.setReplacementCorrelation(replacementCorrelation, for: token)
+            world.setReplacementCorrelation(replacementCorrelation, for: token)
         }
-        if let entry = windows.entry(for: token) {
+        if let entry = world.entry(for: token) {
             let restoreIntent = StateReducer.restoreIntent(for: entry, monitors: monitors)
             if entry.restoreIntent != restoreIntent {
-                windows.setRestoreIntent(restoreIntent, for: token)
+                world.setRestoreIntent(restoreIntent, for: token)
                 resolvedPlan.restoreIntent = restoreIntent
             }
         }
@@ -588,8 +581,8 @@ final class WorkspaceManager {
     }
 
     private func refreshRestoreIntentsForAllEntries() {
-        for entry in windows.allEntries() {
-            windows.setRestoreIntent(
+        for entry in world.allEntries() {
+            world.setRestoreIntent(
                 StateReducer.restoreIntent(for: entry, monitors: monitors),
                 for: entry.token
             )
@@ -658,23 +651,23 @@ final class WorkspaceManager {
 
     private func refreshWindowMonitorReferencesForAllEntries() {
         let context = monitorResolutionContext()
-        for entry in windows.allEntries() {
+        for entry in world.allEntries() {
             let currentMonitorId = monitorId(for: entry.workspaceId, context: context)
             if entry.observedState.monitorId != currentMonitorId {
                 var observedState = entry.observedState
                 observedState.monitorId = currentMonitorId
-                windows.setObservedState(observedState, for: entry.token)
+                world.setObservedState(observedState, for: entry.token)
             }
             if entry.desiredState.monitorId != currentMonitorId {
                 var desiredState = entry.desiredState
                 desiredState.monitorId = currentMonitorId
-                windows.setDesiredState(desiredState, for: entry.token)
+                world.setDesiredState(desiredState, for: entry.token)
             }
         }
     }
 
     private func plannedPersistedHydrationMutation(for token: WindowToken) -> PersistedHydrationMutation? {
-        guard let entry = windows.entry(for: token),
+        guard let entry = world.entry(for: token),
               let metadata = persistedRestoreMetadata(for: entry),
               let hydrationPlan = restorePlanner.planPersistedHydration(
                   .init(
@@ -749,12 +742,12 @@ final class WorkspaceManager {
         _ hydration: PersistedHydrationMutation,
         to token: WindowToken
     ) -> Bool {
-        guard let entry = windows.entry(for: token) else {
+        guard let entry = world.entry(for: token) else {
             return false
         }
 
         if entry.workspaceId != hydration.workspaceId {
-            windows.updateWorkspace(for: token, workspace: hydration.workspaceId)
+            world.updateWorkspace(for: token, workspace: hydration.workspaceId)
         }
 
         let focusChanged = applyWindowModeMutationWithoutReconcile(
@@ -763,10 +756,10 @@ final class WorkspaceManager {
             workspaceId: hydration.workspaceId
         )
 
-        if let entry = windows.entry(for: token) {
+        if let entry = world.entry(for: token) {
             var restoreIntent = StateReducer.restoreIntent(for: entry, monitors: monitors)
             restoreIntent.niriPlacement = hydration.niriPlacement
-            windows.setRestoreIntent(restoreIntent, for: token)
+            world.setRestoreIntent(restoreIntent, for: token)
         }
 
         if let floatingFrame = hydration.floatingFrame {
@@ -776,7 +769,7 @@ final class WorkspaceManager {
                 for: floatingFrame,
                 in: referenceVisibleFrame
             )
-            windows.setFloatingState(
+            world.setFloatingState(
                 .init(
                     lastFrame: floatingFrame,
                     normalizedOrigin: normalizedOrigin,
@@ -804,7 +797,7 @@ final class WorkspaceManager {
         let oldMode = entry.mode
         guard oldMode != mode else { return false }
 
-        windows.setMode(mode, for: token)
+        world.setMode(mode, for: token)
         return updateFocusSession(notify: false) { focus in
             self.reconcileRememberedFocusAfterModeChange(
                 token,
@@ -925,7 +918,7 @@ final class WorkspaceManager {
         let topologyProfile = context.topologyProfile
         var snapshotEntries: [PersistedWindowRestoreCatalogBuildEntry] = []
 
-        for entry in windows.allEntries() {
+        for entry in world.allEntries() {
             guard let metadata = persistedRestoreMetadata(for: entry),
                   let restoreIntent = entry.restoreIntent,
                   let workspaceName = descriptor(for: entry.workspaceId)?.name
@@ -981,7 +974,7 @@ final class WorkspaceManager {
     }
 
     var focusedHandle: WindowHandle? {
-        focusedToken.flatMap { windows.handle(for: $0) }
+        focusedToken.flatMap { world.handle(for: $0) }
     }
 
     var pendingFocusedToken: WindowToken? {
@@ -989,7 +982,7 @@ final class WorkspaceManager {
     }
 
     var pendingFocusedHandle: WindowHandle? {
-        pendingFocusedToken.flatMap { windows.handle(for: $0) }
+        pendingFocusedToken.flatMap { world.handle(for: $0) }
     }
 
     var pendingFocusedWorkspaceId: WorkspaceDescriptor.ID? {
@@ -1914,7 +1907,7 @@ final class WorkspaceManager {
 
     private func focusRevisionWorkspaceId(for focus: SessionState.FocusSession) -> WorkspaceDescriptor.ID? {
         focus.pendingManagedFocus.workspaceId
-            ?? focus.focusedToken.flatMap { windows.entry(for: $0)?.workspaceId }
+            ?? focus.focusedToken.flatMap { world.entry(for: $0)?.workspaceId }
     }
 
     private func bumpFocusRevision(
@@ -2142,8 +2135,8 @@ final class WorkspaceManager {
     private func updateScratchpadToken(_ token: WindowToken?, notify: Bool) -> Bool {
         let previousToken = sessionState.scratchpadToken
         guard previousToken != token else { return false }
-        let previousWorkspaceId = previousToken.flatMap { windows.entry(for: $0)?.workspaceId }
-        let nextWorkspaceId = token.flatMap { windows.entry(for: $0)?.workspaceId }
+        let previousWorkspaceId = previousToken.flatMap { world.entry(for: $0)?.workspaceId }
+        let nextWorkspaceId = token.flatMap { world.entry(for: $0)?.workspaceId }
         if token != nil, nextWorkspaceId == nil {
             return false
         }
@@ -2554,7 +2547,7 @@ final class WorkspaceManager {
         ruleEffects: ManagedWindowRuleEffects = .none,
         managedReplacementMetadata: ManagedReplacementMetadata? = nil
     ) -> WindowToken {
-        let token = windows.upsert(
+        let token = world.upsert(
             window: ax,
             pid: pid,
             windowId: windowId,
@@ -2590,7 +2583,7 @@ final class WorkspaceManager {
         newAXRef: AXWindowRef,
         managedReplacementMetadata: ManagedReplacementMetadata? = nil
     ) -> WindowModel.Entry? {
-        guard let entry = windows.rekeyWindow(
+        guard let entry = world.rekeyWindow(
             from: oldToken,
             to: newToken,
             newAXRef: newAXRef,
@@ -2644,11 +2637,11 @@ final class WorkspaceManager {
     }
 
     func entries(in workspace: WorkspaceDescriptor.ID) -> [WindowModel.Entry] {
-        windows.windows(in: workspace)
+        world.windows(in: workspace)
     }
 
     func tiledEntries(in workspace: WorkspaceDescriptor.ID) -> [WindowModel.Entry] {
-        windows.windows(in: workspace, mode: .tiling)
+        world.windows(in: workspace, mode: .tiling)
     }
 
     func barVisibleEntries(
@@ -2674,7 +2667,7 @@ final class WorkspaceManager {
     }
 
     func floatingEntries(in workspace: WorkspaceDescriptor.ID) -> [WindowModel.Entry] {
-        windows.windows(in: workspace, mode: .floating)
+        world.windows(in: workspace, mode: .floating)
     }
 
     private func barVisibleFloatingEntries(in workspace: WorkspaceDescriptor.ID) -> [WindowModel.Entry] {
@@ -2684,66 +2677,66 @@ final class WorkspaceManager {
     }
 
     func handle(for token: WindowToken) -> WindowHandle? {
-        windows.handle(for: token)
+        world.handle(for: token)
     }
 
     func entry(for token: WindowToken) -> WindowModel.Entry? {
-        windows.entry(for: token)
+        world.entry(for: token)
     }
 
     func entry(for handle: WindowHandle) -> WindowModel.Entry? {
-        windows.entry(for: handle)
+        world.entry(for: handle)
     }
 
     func entry(forPid pid: pid_t, windowId: Int) -> WindowModel.Entry? {
-        windows.entry(forPid: pid, windowId: windowId)
+        world.entry(forPid: pid, windowId: windowId)
     }
 
     func entries(forPid pid: pid_t) -> [WindowModel.Entry] {
-        windows.entries(forPid: pid)
+        world.entries(forPid: pid)
     }
 
     func entry(forWindowId windowId: Int) -> WindowModel.Entry? {
-        windows.entry(forWindowId: windowId)
+        world.entry(forWindowId: windowId)
     }
 
     func entry(forWindowId windowId: Int, inVisibleWorkspaces: Bool) -> WindowModel.Entry? {
         guard inVisibleWorkspaces else {
-            return windows.entry(forWindowId: windowId)
+            return world.entry(forWindowId: windowId)
         }
-        return windows.entry(forWindowId: windowId, inVisibleWorkspaces: visibleWorkspaceIds())
+        return world.entry(forWindowId: windowId, inVisibleWorkspaces: visibleWorkspaceIds())
     }
 
     func allEntries() -> [WindowModel.Entry] {
-        windows.allEntries()
+        world.allEntries()
     }
 
     func allTiledEntries() -> [WindowModel.Entry] {
-        windows.allEntries(mode: .tiling)
+        world.allEntries(mode: .tiling)
     }
 
     func allFloatingEntries() -> [WindowModel.Entry] {
-        windows.allEntries(mode: .floating)
+        world.allEntries(mode: .floating)
     }
 
     func windowMode(for token: WindowToken) -> TrackedWindowMode? {
-        windows.mode(for: token)
+        world.mode(for: token)
     }
 
     func lifecyclePhase(for token: WindowToken) -> WindowLifecyclePhase? {
-        windows.lifecyclePhase(for: token)
+        world.lifecyclePhase(for: token)
     }
 
     func observedState(for token: WindowToken) -> ObservedWindowState? {
-        windows.observedState(for: token)
+        world.observedState(for: token)
     }
 
     func desiredState(for token: WindowToken) -> DesiredWindowState? {
-        windows.desiredState(for: token)
+        world.desiredState(for: token)
     }
 
     func restoreIntent(for token: WindowToken) -> RestoreIntent? {
-        windows.restoreIntent(for: token)
+        world.restoreIntent(for: token)
     }
 
     func setNiriRestorePlacements(_ placements: [WindowToken: PersistedNiriPlacement]) {
@@ -2751,13 +2744,13 @@ final class WorkspaceManager {
 
         var didChange = false
         for (token, placement) in placements {
-            guard let entry = windows.entry(for: token), entry.mode == .tiling else { continue }
+            guard let entry = world.entry(for: token), entry.mode == .tiling else { continue }
 
             var restoreIntent = StateReducer.restoreIntent(for: entry, monitors: monitors)
             guard restoreIntent.niriPlacement != placement else { continue }
 
             restoreIntent.niriPlacement = placement
-            windows.setRestoreIntent(restoreIntent, for: token)
+            world.setRestoreIntent(restoreIntent, for: token)
             didChange = true
         }
 
@@ -2767,11 +2760,11 @@ final class WorkspaceManager {
     }
 
     func replacementCorrelation(for token: WindowToken) -> ReplacementCorrelation? {
-        windows.replacementCorrelation(for: token)
+        world.replacementCorrelation(for: token)
     }
 
     func managedReplacementMetadata(for token: WindowToken) -> ManagedReplacementMetadata? {
-        windows.managedReplacementMetadata(for: token)
+        world.managedReplacementMetadata(for: token)
     }
 
     @discardableResult
@@ -2779,11 +2772,11 @@ final class WorkspaceManager {
         _ metadata: ManagedReplacementMetadata?,
         for token: WindowToken
     ) -> Bool {
-        guard let entry = windows.entry(for: token) else {
+        guard let entry = world.entry(for: token) else {
             return false
         }
-        let previousMetadata = windows.managedReplacementMetadata(for: token)
-        windows.setManagedReplacementMetadata(metadata, for: token)
+        let previousMetadata = world.managedReplacementMetadata(for: token)
+        world.setManagedReplacementMetadata(metadata, for: token)
         guard previousMetadata != metadata else {
             return false
         }
@@ -2803,7 +2796,7 @@ final class WorkspaceManager {
         _ frame: CGRect,
         for token: WindowToken
     ) -> Bool {
-        guard var metadata = windows.managedReplacementMetadata(for: token) else {
+        guard var metadata = world.managedReplacementMetadata(for: token) else {
             return false
         }
         guard metadata.frame != frame else {
@@ -2818,7 +2811,7 @@ final class WorkspaceManager {
         _ title: String,
         for token: WindowToken
     ) -> Bool {
-        guard var metadata = windows.managedReplacementMetadata(for: token) else {
+        guard var metadata = world.managedReplacementMetadata(for: token) else {
             return false
         }
         guard metadata.title != title else {
@@ -2834,7 +2827,7 @@ final class WorkspaceManager {
         let oldMode = entry.mode
         guard oldMode != mode else { return false }
 
-        windows.setMode(mode, for: token)
+        world.setMode(mode, for: token)
         let workspaceId = entry.workspaceId
         let focusChanged = updateFocusSession(notify: false) { focus in
             self.reconcileRememberedFocusAfterModeChange(
@@ -2861,25 +2854,25 @@ final class WorkspaceManager {
     }
 
     func floatingState(for token: WindowToken) -> WindowModel.FloatingState? {
-        windows.floatingState(for: token)
+        world.floatingState(for: token)
     }
 
     func setFloatingState(_ state: WindowModel.FloatingState?, for token: WindowToken) {
-        guard let entry = windows.entry(for: token) else { return }
-        guard windows.floatingState(for: token) != state else { return }
-        windows.setFloatingState(state, for: token)
+        guard let entry = world.entry(for: token) else { return }
+        guard world.floatingState(for: token) != state else { return }
+        world.setFloatingState(state, for: token)
         bumpRuntimeRevision(for: entry.workspaceId, domains: .layout)
         schedulePersistedWindowRestoreCatalogSave()
     }
 
     func manualLayoutOverride(for token: WindowToken) -> ManualWindowOverride? {
-        windows.manualLayoutOverride(for: token)
+        world.manualLayoutOverride(for: token)
     }
 
     func setManualLayoutOverride(_ override: ManualWindowOverride?, for token: WindowToken) {
-        guard let entry = windows.entry(for: token) else { return }
-        guard windows.manualLayoutOverride(for: token) != override else { return }
-        windows.setManualLayoutOverride(override, for: token)
+        guard let entry = world.entry(for: token) else { return }
+        guard world.manualLayoutOverride(for: token) != override else { return }
+        world.setManualLayoutOverride(override, for: token)
         bumpRuntimeRevision(for: entry.workspaceId, domains: .layout)
     }
 
@@ -2906,9 +2899,9 @@ final class WorkspaceManager {
             referenceMonitorId: resolvedReferenceMonitor?.id,
             restoreToFloating: restoreToFloating
         )
-        guard windows.floatingState(for: token) != state else { return }
+        guard world.floatingState(for: token) != state else { return }
 
-        windows.setFloatingState(state, for: token)
+        world.setFloatingState(state, for: token)
         recordReconcileEvent(
             .floatingGeometryUpdated(
                 token: token,
@@ -2958,14 +2951,14 @@ final class WorkspaceManager {
         keys activeKeys: Set<WindowModel.WindowKey>,
         requiredConsecutiveMisses: Int = 1
     ) -> [WindowModel.Entry] {
-        let confirmedMissingKeys = windows.confirmedMissingKeys(
+        let confirmedMissingKeys = world.confirmedMissingKeys(
             keys: activeKeys,
             requiredConsecutiveMisses: requiredConsecutiveMisses
         )
         var removedEntries: [WindowModel.Entry] = []
         removedEntries.reserveCapacity(confirmedMissingKeys.count)
         for key in confirmedMissingKeys {
-            guard let entry = windows.entry(for: key) else { continue }
+            guard let entry = world.entry(for: key) else { continue }
             removedEntries.append(removeTrackedWindow(entry))
         }
         if !removedEntries.isEmpty {
@@ -2976,7 +2969,7 @@ final class WorkspaceManager {
 
     @discardableResult
     func removeWindow(pid: pid_t, windowId: Int) -> WindowModel.Entry? {
-        guard let entry = windows.entry(forPid: pid, windowId: windowId) else { return nil }
+        guard let entry = world.entry(forPid: pid, windowId: windowId) else { return nil }
         let removedEntry = removeTrackedWindow(entry)
         schedulePersistedWindowRestoreCatalogSave()
         return removedEntry
@@ -3010,14 +3003,14 @@ final class WorkspaceManager {
         )
         _ = removeNativeFullscreenRecord(containing: entry.token)
         handleWindowRemoved(entry.token, in: entry.workspaceId)
-        _ = windows.removeWindow(key: entry.token)
+        _ = world.removeWindow(key: entry.token)
         return entry
     }
 
     func setWorkspace(for token: WindowToken, to workspace: WorkspaceDescriptor.ID) {
-        let previousWorkspace = windows.workspace(for: token)
+        let previousWorkspace = world.workspace(for: token)
         guard previousWorkspace != workspace else { return }
-        windows.updateWorkspace(for: token, workspace: workspace)
+        world.updateWorkspace(for: token, workspace: workspace)
         if let originalToken = nativeFullscreenOriginalToken(for: token),
            var record = nativeFullscreenRecordsByOriginalToken[originalToken],
            record.currentToken == token,
@@ -3038,16 +3031,16 @@ final class WorkspaceManager {
     }
 
     func workspace(for token: WindowToken) -> WorkspaceDescriptor.ID? {
-        windows.workspace(for: token)
+        world.workspace(for: token)
     }
 
     func isHiddenInCorner(_ token: WindowToken) -> Bool {
-        windows.isHiddenInCorner(token)
+        world.isHiddenInCorner(token)
     }
 
     func setHiddenState(_ state: WindowModel.HiddenState?, for token: WindowToken) {
-        guard windows.hiddenState(for: token) != state else { return }
-        windows.setHiddenState(state, for: token)
+        guard world.hiddenState(for: token) != state else { return }
+        world.setHiddenState(state, for: token)
         if let workspaceId = workspace(for: token) {
             recordReconcileEvent(
                 .hiddenStateChanged(
@@ -3062,20 +3055,20 @@ final class WorkspaceManager {
     }
 
     func hiddenState(for token: WindowToken) -> WindowModel.HiddenState? {
-        windows.hiddenState(for: token)
+        world.hiddenState(for: token)
     }
 
     func layoutReason(for token: WindowToken) -> LayoutReason {
-        windows.layoutReason(for: token)
+        world.layoutReason(for: token)
     }
 
     func isNativeFullscreenSuspended(_ token: WindowToken) -> Bool {
-        windows.isNativeFullscreenSuspended(token)
+        world.isNativeFullscreenSuspended(token)
     }
 
     func setLayoutReason(_ reason: LayoutReason, for token: WindowToken) {
-        guard windows.layoutReason(for: token) != reason else { return }
-        windows.setLayoutReason(reason, for: token)
+        guard world.layoutReason(for: token) != reason else { return }
+        world.setLayoutReason(reason, for: token)
         guard let workspaceId = workspace(for: token) else { return }
         switch reason {
         case .nativeFullscreen:
@@ -3104,7 +3097,7 @@ final class WorkspaceManager {
 
     func restoreFromNativeState(for token: WindowToken) -> ParentKind? {
         let wasNative = layoutReason(for: token) != .standard
-        let restored = windows.restoreFromNativeState(for: token)
+        let restored = world.restoreFromNativeState(for: token)
         if (restored != nil || wasNative), let workspaceId = workspace(for: token) {
             recordReconcileEvent(
                 .nativeFullscreenTransition(
@@ -3211,18 +3204,18 @@ final class WorkspaceManager {
     }
 
     func cachedConstraints(for token: WindowToken, maxAge: TimeInterval = 5.0) -> WindowSizeConstraints? {
-        windows.cachedConstraints(for: token, maxAge: maxAge)
+        world.cachedConstraints(for: token, maxAge: maxAge)
     }
 
     func setCachedConstraints(_ constraints: WindowSizeConstraints, for token: WindowToken) {
-        guard windows.entry(for: token) != nil else { return }
+        guard world.entry(for: token) != nil else { return }
         let normalized = constraints.normalized()
-        windows.setCachedConstraints(normalized, for: token)
+        world.setCachedConstraints(normalized, for: token)
     }
 
     @discardableResult
     func setObservedMinSize(_ size: CGSize, for token: WindowToken) -> Bool {
-        windows.setObservedMinSize(size, for: token)
+        world.setObservedMinSize(size, for: token)
     }
 
     @discardableResult
@@ -3394,7 +3387,7 @@ final class WorkspaceManager {
             if focusedWorkspaceId == id {
                 continue
             }
-            if !windows.windows(in: id).isEmpty {
+            if !world.windows(in: id).isEmpty {
                 continue
             }
             toRemove.append(id)
@@ -3563,7 +3556,7 @@ final class WorkspaceManager {
 
         let toRemove = workspacesById.compactMap { workspaceId, workspace -> WorkspaceDescriptor.ID? in
             guard !configuredSet.contains(workspace.name) else { return nil }
-            guard windows.windows(in: workspaceId).isEmpty else { return nil }
+            guard world.windows(in: workspaceId).isEmpty else { return nil }
             return workspaceId
         }
         removeWorkspaces(toRemove)
@@ -4226,7 +4219,7 @@ final class WorkspaceManager {
 
         case let .windowRemoved(token, workspaceId, _):
             bumpRuntimeRevision(
-                for: workspaceId ?? windows.entry(for: token)?.workspaceId,
+                for: workspaceId ?? world.entry(for: token)?.workspaceId,
                 domains: [.workspace, .layout, .focus, .fullscreen]
             )
 
@@ -4239,7 +4232,7 @@ final class WorkspaceManager {
 
         case let .managedFocusCancelled(token, workspaceId, _, _):
             bumpRuntimeRevision(
-                for: workspaceId ?? token.flatMap { windows.entry(for: $0)?.workspaceId },
+                for: workspaceId ?? token.flatMap { world.entry(for: $0)?.workspaceId },
                 domains: .focus
             )
 
@@ -4303,7 +4296,7 @@ final class WorkspaceManager {
 
     private func allRuntimeRevisionWorkspaceIds() -> Set<WorkspaceDescriptor.ID> {
         Set(workspacesById.keys)
-            .union(windows.allEntries().map(\.workspaceId))
+            .union(world.allEntries().map(\.workspaceId))
             .union(workspaceRevisions.keys)
             .union(layoutRevisions.keys)
             .union(focusRevisions.keys)

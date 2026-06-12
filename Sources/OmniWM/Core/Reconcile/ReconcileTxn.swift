@@ -10,6 +10,7 @@ struct ReconcileInvariantViolation: Equatable {
 }
 
 struct ReconcileTxn: Equatable {
+    let seq: UInt64
     let timestamp: Date
     let event: WMEvent
     let normalizedEvent: WMEvent

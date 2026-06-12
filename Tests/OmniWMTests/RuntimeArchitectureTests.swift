@@ -154,7 +154,7 @@ final class RuntimeArchitectureTests: XCTestCase {
     func testManagedFocusRequestCarriesRequestId() {
         let workspaceId = WorkspaceDescriptor.ID()
         let token = WindowToken(pid: 100, windowId: 42)
-        let plan = Planner().plan(
+        let plan = StateReducer.reduce(
             event: .managedFocusRequested(
                 token: token,
                 workspaceId: workspaceId,
@@ -688,7 +688,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             )
         )
 
-        let mismatchedPlan = Planner().plan(
+        let mismatchedPlan = StateReducer.reduce(
             event: .managedFocusCancelled(
                 token: token,
                 workspaceId: workspaceId,
@@ -699,7 +699,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             currentSnapshot: snapshot,
             monitors: []
         )
-        let matchingPlan = Planner().plan(
+        let matchingPlan = StateReducer.reduce(
             event: .managedFocusCancelled(
                 token: token,
                 workspaceId: workspaceId,
@@ -730,7 +730,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             interactionMonitorId: previousMonitorId
         )
 
-        let mismatch = Planner().plan(
+        let mismatch = StateReducer.reduce(
             event: .managedFocusConfirmed(
                 token: token,
                 workspaceId: workspaceId,
@@ -743,7 +743,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             currentSnapshot: snapshot,
             monitors: []
         )
-        let match = Planner().plan(
+        let match = StateReducer.reduce(
             event: .managedFocusConfirmed(
                 token: token,
                 workspaceId: workspaceId,
