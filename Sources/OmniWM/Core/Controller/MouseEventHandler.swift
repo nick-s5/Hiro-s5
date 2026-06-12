@@ -708,6 +708,7 @@ final class MouseEventHandler {
             {
                 let workingFrame = controller.insetWorkingFrame(for: monitor)
                 let gaps = CGFloat(controller.workspaceManager.gaps)
+                let movedToken = engine.interactiveMove?.windowHandle.id
                 var didEnd = false
                 controller.workspaceManager.withNiriViewportState(for: wsId) { vstate in
                     didEnd = engine.interactiveMoveEnd(
@@ -720,6 +721,15 @@ final class MouseEventHandler {
                     )
                 }
                 if didEnd {
+                    if let movedToken {
+                        controller.workspaceManager.recordReconcileEvent(
+                            .layoutOperationPerformed(
+                                workspaceId: wsId,
+                                operation: .interactiveMoveEnded(token: movedToken),
+                                source: .mouse
+                            )
+                        )
+                    }
                     controller.layoutRefreshController.requestImmediateRelayout(reason: .interactiveGesture)
                 }
             }
@@ -742,6 +752,8 @@ final class MouseEventHandler {
             let workingFrame = controller.insetWorkingFrame(for: monitor)
             let gaps = CGFloat(controller.workspaceManager.gaps)
             let hadInteractiveResize = engine.interactiveResize != nil
+            let resizedToken = engine.interactiveResize
+                .flatMap { (engine.findNode(by: $0.windowId) as? NiriWindow)?.token }
 
             controller.workspaceManager.withNiriViewportState(for: wsId) { vstate in
                 engine.interactiveResizeEnd(
@@ -752,6 +764,15 @@ final class MouseEventHandler {
                 )
             }
             if hadInteractiveResize {
+                if let resizedToken {
+                    controller.workspaceManager.recordReconcileEvent(
+                        .layoutOperationPerformed(
+                            workspaceId: wsId,
+                            operation: .interactiveResizeEnded(token: resizedToken),
+                            source: .mouse
+                        )
+                    )
+                }
                 controller.layoutRefreshController.requestImmediateRelayout(reason: .interactiveGesture)
             }
         }
