@@ -140,13 +140,132 @@ struct PendingManagedFocusSnapshot: Equatable {
 }
 
 struct FocusSessionSnapshot: Equatable {
-    var focusedToken: WindowToken?
-    var pendingManagedFocus: PendingManagedFocusSnapshot
-    var focusLease: FocusPolicyLease?
-    var isNonManagedFocusActive: Bool
-    var isAppFullscreenActive: Bool
-    var interactionMonitorId: Monitor.ID?
-    var previousInteractionMonitorId: Monitor.ID?
+    var focusedToken: WindowToken? = nil
+    var pendingManagedFocus: PendingManagedFocusSnapshot = .empty
+    var lastTiledFocusedByWorkspace: [WorkspaceDescriptor.ID: WindowToken] = [:]
+    var lastFloatingFocusedByWorkspace: [WorkspaceDescriptor.ID: WindowToken] = [:]
+    var focusLease: FocusPolicyLease? = nil
+    var isNonManagedFocusActive: Bool = false
+    var isAppFullscreenActive: Bool = false
+    var nonManagedFocusToken: WindowToken? = nil
+    var suppressedFocusToken: WindowToken? = nil
+    var interactionMonitorId: Monitor.ID? = nil
+    var previousInteractionMonitorId: Monitor.ID? = nil
+}
+
+extension FocusSessionSnapshot {
+    @discardableResult
+    mutating func rememberFocus(
+        _ token: WindowToken,
+        in workspaceId: WorkspaceDescriptor.ID,
+        mode: TrackedWindowMode
+    ) -> Bool {
+        switch mode {
+        case .tiling:
+            guard lastTiledFocusedByWorkspace[workspaceId] != token else { return false }
+            lastTiledFocusedByWorkspace[workspaceId] = token
+            return true
+        case .floating:
+            guard lastFloatingFocusedByWorkspace[workspaceId] != token else { return false }
+            lastFloatingFocusedByWorkspace[workspaceId] = token
+            return true
+        }
+    }
+
+    @discardableResult
+    mutating func clearRememberedFocus(
+        _ token: WindowToken,
+        workspaceId: WorkspaceDescriptor.ID?
+    ) -> Bool {
+        var changed = false
+
+        if let workspaceId {
+            if lastTiledFocusedByWorkspace[workspaceId] == token {
+                lastTiledFocusedByWorkspace[workspaceId] = nil
+                changed = true
+            }
+            if lastFloatingFocusedByWorkspace[workspaceId] == token {
+                lastFloatingFocusedByWorkspace[workspaceId] = nil
+                changed = true
+            }
+            return changed
+        }
+
+        for (id, rememberedToken) in lastTiledFocusedByWorkspace where rememberedToken == token {
+            lastTiledFocusedByWorkspace[id] = nil
+            changed = true
+        }
+        for (id, rememberedToken) in lastFloatingFocusedByWorkspace where rememberedToken == token {
+            lastFloatingFocusedByWorkspace[id] = nil
+            changed = true
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    mutating func replaceRememberedFocus(from oldToken: WindowToken, to newToken: WindowToken) -> Bool {
+        var changed = false
+
+        for (workspaceId, token) in lastTiledFocusedByWorkspace where token == oldToken {
+            lastTiledFocusedByWorkspace[workspaceId] = newToken
+            changed = true
+        }
+        for (workspaceId, token) in lastFloatingFocusedByWorkspace where token == oldToken {
+            lastFloatingFocusedByWorkspace[workspaceId] = newToken
+            changed = true
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    mutating func reconcileRememberedFocus(
+        afterModeChangeOf token: WindowToken,
+        in workspaceId: WorkspaceDescriptor.ID,
+        to newMode: TrackedWindowMode
+    ) -> Bool {
+        var changed = false
+        switch newMode {
+        case .tiling:
+            if lastFloatingFocusedByWorkspace[workspaceId] == token {
+                lastFloatingFocusedByWorkspace[workspaceId] = nil
+                changed = true
+            }
+        case .floating:
+            if lastTiledFocusedByWorkspace[workspaceId] == token {
+                lastTiledFocusedByWorkspace[workspaceId] = nil
+                changed = true
+            }
+        }
+
+        if focusedToken == token || pendingManagedFocus.token == token {
+            changed = rememberFocus(token, in: workspaceId, mode: newMode) || changed
+        }
+
+        return changed
+    }
+
+    @discardableResult
+    mutating func clearPendingManagedFocus() -> Bool {
+        guard pendingManagedFocus != .empty else { return false }
+        pendingManagedFocus = .empty
+        return true
+    }
+
+    @discardableResult
+    mutating func clearPendingManagedFocus(
+        matching token: WindowToken?,
+        workspaceId: WorkspaceDescriptor.ID?,
+        requestId: UInt64?
+    ) -> Bool {
+        let request = pendingManagedFocus
+        let matchesToken = token.map { request.token == $0 } ?? true
+        let matchesWorkspace = workspaceId.map { request.workspaceId == $0 } ?? true
+        let matchesRequest = requestId.map { request.requestId == $0 } ?? (request.requestId == nil)
+        guard matchesToken, matchesWorkspace, matchesRequest else { return false }
+        return clearPendingManagedFocus()
+    }
 }
 
 struct ReconcileWindowSnapshot: Equatable {
