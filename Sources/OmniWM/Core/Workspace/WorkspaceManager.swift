@@ -220,12 +220,21 @@ final class WorkspaceManager {
                 )
             }
 
+        var layouts: [WorkspaceDescriptor.ID: LayoutTopology] = [:]
+        for workspaceId in Set(windowSnapshots.map(\.workspaceId)) {
+            let topology = world.layoutTopology(for: workspaceId)
+            if topology.hasColumns || !topology.dwindleFullscreenTokens.isEmpty {
+                layouts[workspaceId] = topology
+            }
+        }
+
         return ReconcileSnapshot(
             topologyProfile: currentTopologyProfile(),
             focusSession: world.focus,
             windows: windowSnapshots,
             viewports: world.viewports,
-            selectionSeqs: world.selectionSeqs
+            selectionSeqs: world.selectionSeqs,
+            layouts: layouts
         )
     }
 

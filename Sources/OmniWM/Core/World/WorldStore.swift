@@ -126,10 +126,13 @@ final class WorldStore {
         var tracedPlan = resolvedPlan
         if !invariantViolations.isEmpty {
             tracedPlan.notes.append(contentsOf: invariantViolations.map(\.traceNote))
-            assertionFailure(
-                "Reconcile invariants violated after \(event.summary): "
-                    + invariantViolations.map(\.code).joined(separator: ",")
-            )
+            let assertable = invariantViolations.filter { $0.severity == .assert }
+            if !assertable.isEmpty {
+                assertionFailure(
+                    "Reconcile invariants violated after \(event.summary): "
+                        + assertable.map(\.code).joined(separator: ",")
+                )
+            }
         }
         let txn = ReconcileTxn(
             seq: committedSeq,
