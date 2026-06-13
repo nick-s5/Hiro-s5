@@ -129,6 +129,10 @@ struct VirtualHyperEventState: Equatable {
         pendingTrigger != nil
     }
 
+    var isDormant: Bool {
+        !isActive && pendingTrigger == nil && consumedKeyCodes.isEmpty && consumedMouseButtons.isEmpty
+    }
+
     mutating func reset() {
         isActive = false
         pendingTrigger = nil
@@ -319,15 +323,9 @@ final class HotkeyCenter {
     private var configuration = HotkeyRuntimeConfiguration()
     private var pendingCommands: [HotkeyCommand] = []
     private var pendingCommandDrainScheduled = false
-    private struct EventTapHandle {
-        let port: CFMachPort
-        let source: CFRunLoopSource
-    }
-
     private var virtualHyperRegistrations: [KeyBinding: HotkeyCommand] = [:]
-    private var virtualHyperIdleTap: EventTapHandle?
-    private var virtualHyperEngagedTap: EventTapHandle?
-    private var virtualHyperTapEngaged = false
+    private var virtualHyperTap: CFMachPort?
+    private var virtualHyperRunLoopSource: CFRunLoopSource?
     private var virtualHyperState = VirtualHyperEventState()
     private var pendingVirtualHyperDownEvent: CGEvent?
     private var virtualHyperHoldWorkItem: DispatchWorkItem?
@@ -506,52 +504,17 @@ final class HotkeyCenter {
         capsLockHyperRemapActive = false
     }
 
-    private var virtualHyperIdleEventMask: CGEventMask {
-        let trigger = effectiveHyperTrigger
-        if trigger.mouseButtonNumber != nil {
-            return CGEventMask(1 << CGEventType.otherMouseDown.rawValue)
-        }
-        if let keyCode = trigger.keyboardKeyCode, !Self.isModifierKeyCode(keyCode) {
-            return CGEventMask(1 << CGEventType.keyDown.rawValue)
-        }
-        return CGEventMask(1 << CGEventType.flagsChanged.rawValue)
-    }
-
-    private var virtualHyperEngagedEventMask: CGEventMask {
-        var mask = CGEventMask(
-            (1 << CGEventType.keyDown.rawValue) |
-                (1 << CGEventType.keyUp.rawValue) |
-                (1 << CGEventType.flagsChanged.rawValue)
-        )
-        if effectiveHyperTrigger.mouseButtonNumber != nil {
-            mask |= CGEventMask(
-                (1 << CGEventType.otherMouseDown.rawValue) |
-                    (1 << CGEventType.otherMouseUp.rawValue)
-            )
-        }
-        return mask
-    }
-
     private func setupVirtualHyperTapIfNeeded() -> Bool {
-        if virtualHyperIdleTap != nil { return true }
+        if virtualHyperTap != nil { return true }
         if let virtualHyperTapSetupOverride {
             return virtualHyperTapSetupOverride()
         }
-        guard let idleTap = makeVirtualHyperTap(mask: virtualHyperIdleEventMask),
-              let engagedTap = makeVirtualHyperTap(mask: virtualHyperEngagedEventMask)
-        else {
-            teardownVirtualHyperTap(virtualHyperIdleTap)
-            virtualHyperIdleTap = nil
-            return false
-        }
-        virtualHyperIdleTap = idleTap
-        virtualHyperEngagedTap = engagedTap
-        virtualHyperTapEngaged = false
-        reassertVirtualHyperTapEnablement()
-        return true
-    }
-
-    private func makeVirtualHyperTap(mask: CGEventMask) -> EventTapHandle? {
+        let eventMask =
+            (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.keyUp.rawValue) |
+            (1 << CGEventType.flagsChanged.rawValue) |
+            (1 << CGEventType.otherMouseDown.rawValue) |
+            (1 << CGEventType.otherMouseUp.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else { return Unmanaged.passUnretained(event) }
             let center = Unmanaged<HotkeyCenter>.fromOpaque(userInfo).takeUnretainedValue()
@@ -560,55 +523,35 @@ final class HotkeyCenter {
             }
         }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        guard let port = CGEvent.tapCreate(
+        virtualHyperTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
-            eventsOfInterest: mask,
+            eventsOfInterest: CGEventMask(eventMask),
             callback: callback,
             userInfo: selfPtr
-        ),
-            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
-        else {
-            return nil
+        )
+        guard let tap = virtualHyperTap else { return false }
+        virtualHyperRunLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        guard let source = virtualHyperRunLoopSource else {
+            virtualHyperTap = nil
+            return false
         }
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        return EventTapHandle(port: port, source: source)
-    }
-
-    private var isVirtualHyperEngaged: Bool {
-        virtualHyperState.isActive || virtualHyperState.isPending ||
-            !virtualHyperState.consumedKeyCodes.isEmpty ||
-            !virtualHyperState.consumedMouseButtons.isEmpty
-    }
-
-    private func syncVirtualHyperTapEngagement() {
-        guard virtualHyperIdleTap != nil, virtualHyperEngagedTap != nil else { return }
-        let shouldEngage = isVirtualHyperEngaged
-        guard shouldEngage != virtualHyperTapEngaged else { return }
-        virtualHyperTapEngaged = shouldEngage
-        reassertVirtualHyperTapEnablement()
-    }
-
-    private func reassertVirtualHyperTapEnablement() {
-        guard let idleTap = virtualHyperIdleTap, let engagedTap = virtualHyperEngagedTap else { return }
-        CGEvent.tapEnable(tap: engagedTap.port, enable: virtualHyperTapEngaged)
-        CGEvent.tapEnable(tap: idleTap.port, enable: !virtualHyperTapEngaged)
-    }
-
-    private func teardownVirtualHyperTap(_ handle: EventTapHandle?) {
-        guard let handle else { return }
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), handle.source, .commonModes)
-        CGEvent.tapEnable(tap: handle.port, enable: false)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        return true
     }
 
     private func stopVirtualHyperTap() {
         resetVirtualHyperState()
-        teardownVirtualHyperTap(virtualHyperIdleTap)
-        teardownVirtualHyperTap(virtualHyperEngagedTap)
-        virtualHyperIdleTap = nil
-        virtualHyperEngagedTap = nil
-        virtualHyperTapEngaged = false
+        if let source = virtualHyperRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+            virtualHyperRunLoopSource = nil
+        }
+        if let tap = virtualHyperTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            virtualHyperTap = nil
+        }
     }
 
     private func dispatchCommandLater(_ command: HotkeyCommand) {
@@ -632,22 +575,27 @@ final class HotkeyCenter {
     }
 
     private func handleVirtualHyperEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        let result = processVirtualHyperEvent(type: type, event: event)
-        syncVirtualHyperTapEngagement()
-        return result
-    }
-
-    private func processVirtualHyperEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if Self.isSyntheticVirtualHyperReplayEvent(event) {
             return Unmanaged.passUnretained(event)
         }
         switch type {
         case .tapDisabledByTimeout:
-            reassertVirtualHyperTapEnablement()
+            if let tap = virtualHyperTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            }
             return Unmanaged.passUnretained(event)
         case .tapDisabledByUserInput:
             resetVirtualHyperState()
             return Unmanaged.passUnretained(event)
+        default:
+            break
+        }
+        if virtualHyperState.isDormant,
+           !dormantVirtualHyperEventRequiresHandling(type: type, event: event)
+        {
+            return Unmanaged.passUnretained(event)
+        }
+        switch type {
         case .otherMouseDown:
             return handleVirtualHyperMouseDown(event)
         case .otherMouseUp:
@@ -660,6 +608,30 @@ final class HotkeyCenter {
             return handleVirtualHyperFlagsChanged(event)
         default:
             return Unmanaged.passUnretained(event)
+        }
+    }
+
+    private func dormantVirtualHyperEventRequiresHandling(type: CGEventType, event: CGEvent) -> Bool {
+        switch type {
+        case .keyDown,
+             .keyUp,
+             .flagsChanged:
+            let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+            return Self.dormantEventMatchesHyperTrigger(
+                type: type,
+                keyCode: keyCode,
+                trigger: effectiveHyperTrigger
+            )
+        case .otherMouseDown,
+             .otherMouseUp:
+            let button = event.getIntegerValueField(.mouseEventButtonNumber)
+            return Self.dormantEventMatchesHyperTrigger(
+                type: type,
+                mouseButton: button,
+                trigger: effectiveHyperTrigger
+            )
+        default:
+            return false
         }
     }
 
@@ -713,10 +685,13 @@ final class HotkeyCenter {
         if virtualHyperState.isPending {
             promotePendingVirtualHyper()
         }
-        let modifiers = matchingModifiers(from: event.flags)
-        let command = virtualHyperState.isActive
-            ? virtualHyperRegistrations[KeyBinding(keyCode: keyCode, modifiers: modifiers, usesHyper: true)]
-            : nil
+        let command: HotkeyCommand?
+        if virtualHyperState.isActive {
+            let modifiers = matchingModifiers(from: event.flags)
+            command = virtualHyperRegistrations[KeyBinding(keyCode: keyCode, modifiers: modifiers, usesHyper: true)]
+        } else {
+            command = nil
+        }
         let decision = virtualHyperState.handleKeyDown(
             keyCode: keyCode,
             isAutorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
@@ -998,6 +973,29 @@ extension HotkeyCenter {
             virtualHyperRegistrations: virtualHyperRegistrations,
             failures: failures
         )
+    }
+
+    nonisolated static func dormantEventMatchesHyperTrigger(
+        type: CGEventType,
+        keyCode: UInt32? = nil,
+        mouseButton: Int64? = nil,
+        trigger: HyperKeyTrigger
+    ) -> Bool {
+        switch type {
+        case .keyDown,
+             .keyUp,
+             .flagsChanged:
+            guard let keyCode else { return true }
+            guard let triggerKeyCode = trigger.keyboardKeyCode else { return false }
+            return keyCode == triggerKeyCode
+        case .otherMouseDown,
+             .otherMouseUp:
+            guard let mouseButton else { return true }
+            guard let triggerButton = trigger.mouseButtonNumber else { return false }
+            return mouseButton == triggerButton
+        default:
+            return false
+        }
     }
 }
 

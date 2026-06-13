@@ -1,4 +1,5 @@
 import Carbon
+import CoreGraphics
 @testable import OmniWM
 import XCTest
 
@@ -230,6 +231,146 @@ final class HotkeyChordTests: XCTestCase {
         XCTAssertEqual(state.pendingKeyMatches(UInt32(kVK_ANSI_H), trigger: trigger), true)
         XCTAssertEqual(state.cancelPending(), true)
         XCTAssertEqual(state.isPending, false)
+    }
+
+    func testVirtualHyperStateDormantTracksActivePendingAndConsumedInputs() {
+        var state = VirtualHyperEventState()
+        let trigger = HyperKeyTrigger.key(UInt32(kVK_ANSI_H))
+
+        XCTAssertTrue(state.isDormant)
+
+        XCTAssertEqual(state.handleTriggerKeyDown(UInt32(kVK_ANSI_H), trigger: trigger), true)
+        XCTAssertFalse(state.isDormant)
+
+        state.reset()
+        XCTAssertTrue(state.beginPendingKeyDown(UInt32(kVK_ANSI_H), trigger: trigger))
+        XCTAssertFalse(state.isDormant)
+
+        XCTAssertTrue(state.cancelPending())
+        XCTAssertTrue(state.isDormant)
+
+        state.consumeKeyCode(UInt32(kVK_ANSI_J))
+        XCTAssertFalse(state.isDormant)
+
+        state.reset()
+        state.consumedMouseButtons.insert(3)
+        XCTAssertFalse(state.isDormant)
+    }
+
+    func testVirtualHyperStateConsumedKeyKeepsDormantFastPathDisabledUntilKeyUp() {
+        var state = VirtualHyperEventState()
+        let trigger = HyperKeyTrigger.key(UInt32(kVK_ANSI_H))
+
+        state.consumeKeyCode(UInt32(kVK_ANSI_J))
+
+        XCTAssertFalse(state.isDormant)
+        XCTAssertEqual(state.handleTriggerKeyUp(UInt32(kVK_ANSI_J), trigger: trigger), true)
+        XCTAssertTrue(state.isDormant)
+    }
+
+    func testDormantVirtualHyperPredicateHandlesTriggerEvents() {
+        let keyTrigger = HyperKeyTrigger.key(UInt32(kVK_ANSI_H))
+
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyDown,
+                keyCode: UInt32(kVK_ANSI_H),
+                trigger: keyTrigger
+            )
+        )
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyUp,
+                keyCode: UInt32(kVK_ANSI_H),
+                trigger: keyTrigger
+            )
+        )
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .flagsChanged,
+                keyCode: UInt32(kVK_ANSI_H),
+                trigger: keyTrigger
+            )
+        )
+
+        let mouseTrigger = HyperKeyTrigger.mouseButton(4)
+
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .otherMouseDown,
+                mouseButton: 4,
+                trigger: mouseTrigger
+            )
+        )
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .otherMouseUp,
+                mouseButton: 4,
+                trigger: mouseTrigger
+            )
+        )
+    }
+
+    func testDormantVirtualHyperPredicateSkipsNonTriggerEvents() {
+        let keyTrigger = HyperKeyTrigger.key(UInt32(kVK_ANSI_H))
+
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyDown,
+                keyCode: UInt32(kVK_ANSI_J),
+                trigger: keyTrigger
+            )
+        )
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyUp,
+                keyCode: UInt32(kVK_ANSI_J),
+                trigger: keyTrigger
+            )
+        )
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .flagsChanged,
+                keyCode: UInt32(kVK_ANSI_J),
+                trigger: keyTrigger
+            )
+        )
+
+        let mouseTrigger = HyperKeyTrigger.mouseButton(4)
+
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .otherMouseDown,
+                mouseButton: 5,
+                trigger: mouseTrigger
+            )
+        )
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .otherMouseUp,
+                mouseButton: 5,
+                trigger: mouseTrigger
+            )
+        )
+    }
+
+    func testDormantVirtualHyperPredicateUsesEffectiveCapsLockRemapTrigger() {
+        let remappedTrigger = HyperKeyTrigger.key(CapsLockHyperMapping.f18KeyCode)
+
+        XCTAssertTrue(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyDown,
+                keyCode: CapsLockHyperMapping.f18KeyCode,
+                trigger: remappedTrigger
+            )
+        )
+        XCTAssertFalse(
+            HotkeyCenter.dormantEventMatchesHyperTrigger(
+                type: .keyDown,
+                keyCode: UInt32(kVK_CapsLock),
+                trigger: remappedTrigger
+            )
+        )
     }
 
     func testSettingsTOMLDoesNotEmitLeaderOrSequenceTimeout() throws {
