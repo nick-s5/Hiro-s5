@@ -60,7 +60,10 @@ final class AXFrameApplicationLedger {
     private var pendingFrameObserversByRequestId: [AXFrameRequestId: PendingFrameObserver] = [:]
     private var observerRequestIdByWindowId: [Int: AXFrameRequestId] = [:]
     private var rekeyedWindowIdsByPreviousId: [Int: Int] = [:]
+    private var sizeQuantumByWindowId: [Int: CGSize] = [:]
     private var nextFrameApplicationRequestId: AXFrameRequestId = 1
+
+    private static let maxLearnableSnapQuantum: CGFloat = 16
 
     func forceApplyNextFrame(for windowId: Int) {
         forceApplyWindowIds.insert(windowId)
@@ -80,6 +83,35 @@ final class AXFrameApplicationLedger {
 
     func pendingFrameWrite(for windowId: Int) -> CGRect? {
         pendingFrameWrites[windowId]
+    }
+
+    private func frameWithinConvergence(cached: CGRect, target: CGRect, windowId: Int) -> Bool {
+        guard let quantum = sizeQuantumByWindowId[windowId] else {
+            return cached.approximatelyEqual(to: target, tolerance: FrameTolerance.frameWrite)
+        }
+        guard abs(cached.minX - target.minX) < FrameTolerance.frameWrite,
+              abs(cached.minY - target.minY) < FrameTolerance.frameWrite
+        else {
+            return false
+        }
+        return abs(cached.width - target.width) <= max(FrameTolerance.frameWrite, quantum.width)
+            && abs(cached.height - target.height) <= max(FrameTolerance.frameWrite, quantum.height)
+    }
+
+    private func learnSizeQuantum(windowId: Int, target: CGRect, observed: CGRect) {
+        let widthDelta = abs(observed.width - target.width)
+        let heightDelta = abs(observed.height - target.height)
+        let snapWidth = widthDelta > FrameTolerance.frameWrite && widthDelta <= Self.maxLearnableSnapQuantum
+            ? widthDelta.rounded(.up) : 0
+        let snapHeight = heightDelta > FrameTolerance.frameWrite && heightDelta <= Self.maxLearnableSnapQuantum
+            ? heightDelta.rounded(.up) : 0
+        guard snapWidth > 0 || snapHeight > 0 else { return }
+        let existing = sizeQuantumByWindowId[windowId] ?? .zero
+        sizeQuantumByWindowId[windowId] = CGSize(
+            width: max(existing.width, snapWidth),
+            height: max(existing.height, snapHeight)
+        )
+        lastAppliedFrames[windowId] = observed
     }
 
     func shouldSuppressFrameChangeRelayout(for windowId: Int, observedFrame: CGRect?) -> Bool {
@@ -106,6 +138,10 @@ final class AXFrameApplicationLedger {
 
         if let frame = lastAppliedFrames.removeValue(forKey: oldWindowId) {
             lastAppliedFrames[newWindowId] = frame
+        }
+
+        if let quantum = sizeQuantumByWindowId.removeValue(forKey: oldWindowId) {
+            sizeQuantumByWindowId[newWindowId] = quantum
         }
 
         if assumedAppliedWindowIds.remove(oldWindowId) != nil {
@@ -147,6 +183,7 @@ final class AXFrameApplicationLedger {
         assumedAppliedWindowIds.remove(windowId)
         recentFrameWriteFailures.removeValue(forKey: windowId)
         retryBudgetByWindowId.removeValue(forKey: windowId)
+        sizeQuantumByWindowId.removeValue(forKey: windowId)
         clearSettledRekeyMappings(to: windowId)
     }
 
@@ -159,6 +196,7 @@ final class AXFrameApplicationLedger {
         recentFrameWriteFailures.removeValue(forKey: windowId)
         retryBudgetByWindowId.removeValue(forKey: windowId)
         forceApplyWindowIds.remove(windowId)
+        sizeQuantumByWindowId.removeValue(forKey: windowId)
         pruneRekeyMappingsAfterRemovingWindowState(for: windowId)
         return deliveries
     }
@@ -183,6 +221,7 @@ final class AXFrameApplicationLedger {
         recentFrameWriteFailures.removeValue(forKey: windowId)
         retryBudgetByWindowId.removeValue(forKey: windowId)
         forceApplyWindowIds.remove(windowId)
+        sizeQuantumByWindowId.removeValue(forKey: windowId)
         clearSettledRekeyMappings(to: windowId)
         return deliveries
     }
@@ -218,7 +257,7 @@ final class AXFrameApplicationLedger {
                     return AXFrameEnqueueDecision()
                 }
             } else if let cached = cachedFrame,
-                      cached.approximatelyEqual(to: frame, tolerance: FrameTolerance.frameWrite),
+                      frameWithinConvergence(cached: cached, target: frame, windowId: windowId),
                       !hasRecentFailure,
                       !shouldReverifyAssumedFrame
             {
@@ -317,6 +356,7 @@ final class AXFrameApplicationLedger {
                     assumedAppliedWindowIds.insert(resolvedWindowId)
                 } else {
                     assumedAppliedWindowIds.remove(resolvedWindowId)
+                    sizeQuantumByWindowId.removeValue(forKey: resolvedWindowId)
                 }
                 recentFrameWriteFailures.removeValue(forKey: resolvedWindowId)
                 retryBudgetByWindowId.removeValue(forKey: resolvedWindowId)
@@ -349,6 +389,11 @@ final class AXFrameApplicationLedger {
                             targetFrame: resolvedResult.targetFrame,
                             observedFrame: observedFrame
                         )
+                    )
+                    learnSizeQuantum(
+                        windowId: resolvedWindowId,
+                        target: resolvedResult.targetFrame,
+                        observed: observedFrame
                     )
                 }
                 outcome.deliveries.append(contentsOf: notifyPendingFrameObserver(with: resolvedResult))
