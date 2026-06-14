@@ -110,8 +110,6 @@ private enum PersistedWindowRestoreCatalogBuilder {
 
 @MainActor
 final class WorkspaceManager {
-    static let staleUnavailableNativeFullscreenTimeout: TimeInterval = 15
-
     enum NativeFullscreenTransition: Equatable {
         case enterRequested
         case suspended
@@ -1446,93 +1444,6 @@ final class WorkspaceManager {
         }
 
         return changed
-    }
-
-    @discardableResult
-    func markNativeFullscreenTemporarilyUnavailable(
-        _ token: WindowToken,
-        now: Date = Date()
-    ) -> NativeFullscreenRecord? {
-        guard let originalToken = nativeFullscreenOriginalToken(for: token),
-              var record = nativeFullscreenRecordsByOriginalToken[originalToken]
-        else {
-            return nil
-        }
-
-        if layoutReason(for: record.currentToken) != .nativeFullscreen {
-            setLayoutReason(.nativeFullscreen, for: record.currentToken)
-        }
-
-        if record.currentToken != token {
-            record.currentToken = token
-        }
-        if let workspaceId = workspace(for: token), record.workspaceId != workspaceId {
-            record.workspaceId = workspaceId
-        }
-        record.availability = .temporarilyUnavailable
-        if record.unavailableSince == nil {
-            record.unavailableSince = now
-        }
-        record = upsertNativeFullscreenRecord(record)
-        _ = setManagedAppFullscreen(false)
-        return record
-    }
-
-    func nativeFullscreenUnavailableCandidate(
-        for pid: pid_t,
-        activeWorkspaceId: WorkspaceDescriptor.ID?,
-        now: Date = Date()
-    ) -> NativeFullscreenRecord? {
-        let candidates = nativeFullscreenRecordsByOriginalToken.values.filter { record in
-            guard record.currentToken.pid == pid,
-                  record.availability == .temporarilyUnavailable,
-                  isNativeFullscreenUnavailableCandidateFresh(record, now: now)
-            else {
-                return false
-            }
-            return true
-        }
-        guard !candidates.isEmpty else { return nil }
-
-        if let activeWorkspaceId {
-            let workspaceMatches = candidates.filter { $0.workspaceId == activeWorkspaceId }
-            if workspaceMatches.count == 1 {
-                return workspaceMatches[0]
-            }
-        }
-
-        let commandMatches = candidates.filter(\.exitRequestedByCommand)
-        if commandMatches.count == 1 {
-            return commandMatches[0]
-        }
-
-        guard candidates.count == 1 else { return nil }
-        return candidates[0]
-    }
-
-    private func isNativeFullscreenUnavailableCandidateFresh(
-        _ record: NativeFullscreenRecord,
-        now: Date
-    ) -> Bool {
-        guard let unavailableSince = record.unavailableSince else { return false }
-        return now.timeIntervalSince(unavailableSince) < Self.staleUnavailableNativeFullscreenTimeout
-    }
-
-    @discardableResult
-    func attachNativeFullscreenReplacement(
-        _ originalToken: WindowToken,
-        to newToken: WindowToken
-    ) -> Bool {
-        guard var record = nativeFullscreenRecordsByOriginalToken[originalToken] else {
-            return false
-        }
-        guard record.currentToken != newToken else { return false }
-        record.currentToken = newToken
-        if let workspaceId = workspace(for: newToken) {
-            record.workspaceId = workspaceId
-        }
-        upsertNativeFullscreenRecord(record)
-        return true
     }
 
     @discardableResult

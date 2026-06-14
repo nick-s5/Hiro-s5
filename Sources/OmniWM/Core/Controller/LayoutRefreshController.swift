@@ -1337,33 +1337,10 @@ import QuartzCore
                 appFullscreen: appFullscreen
             )
             let decision = evaluation.decision
-            var existingEntry = controller.workspaceManager.entry(for: token)
+            let existingEntry = controller.workspaceManager.entry(for: token)
             let createPlacementContext = existingEntry == nil
                 ? controller.axEventHandler.pendingCreatePlacementContext(for: winId)
                 : nil
-            let replacementWorkspace = controller.resolvedWorkspaceId(
-                for: evaluation,
-                axRef: ax,
-                existingEntry: existingEntry,
-                fallbackWorkspaceId: focusedWorkspaceId,
-                restrictWorkspaceRuleToPlacementMonitor: false,
-                createPlacementContext: createPlacementContext
-            )
-            var restoredNativeFullscreenReplacement = false
-            if controller.workspaceAssignment(pid: pid, windowId: winId) == nil,
-               controller.axEventHandler.restoreNativeFullscreenReplacementIfNeeded(
-                   token: token,
-                   windowId: UInt32(winId),
-                   axRef: ax,
-                   workspaceId: replacementWorkspace,
-                   appFullscreen: appFullscreen
-               )
-            {
-                restoredNativeFullscreenReplacement = true
-                seenKeys.insert(token)
-                existingEntry = controller.workspaceManager.entry(for: token)
-                controller.axEventHandler.discardCreatePlacementContext(for: winId)
-            }
             let shouldPreservePreFullscreenState = existingEntry.map { existingEntry in
                 !appFullscreen
                     && (
@@ -1374,11 +1351,6 @@ import QuartzCore
             let effectiveTrackedMode: TrackedWindowMode?
             if shouldPreservePreFullscreenState {
                 effectiveTrackedMode = existingEntry?.mode
-            } else if restoredNativeFullscreenReplacement {
-                effectiveTrackedMode = controller.trackedModeForLifecycle(
-                    decision: decision,
-                    existingEntry: existingEntry
-                )
             } else {
                 effectiveTrackedMode = controller.trackedModePreservingAutomaticFallbackState(
                     decision: decision,
@@ -1429,20 +1401,6 @@ import QuartzCore
                 restrictWorkspaceRuleToPlacementMonitor: trackedMode != .floating,
                 createPlacementContext: createPlacementContext
             )
-            if controller.workspaceAssignment(pid: pid, windowId: winId) == nil,
-               controller.axEventHandler.restoreNativeFullscreenReplacementIfNeeded(
-                   token: token,
-                   windowId: UInt32(winId),
-                   axRef: ax,
-                   workspaceId: defaultWorkspace,
-                   appFullscreen: appFullscreen
-               )
-            {
-                seenKeys.insert(token)
-                controller.axEventHandler.discardCreatePlacementContext(for: winId)
-                continue
-            }
-
             let wsForWindow: WorkspaceDescriptor.ID
             let ruleEffects: ManagedWindowRuleEffects
             if let existingEntry {
