@@ -79,6 +79,7 @@ struct SettingsExport: Equatable {
     var preventSleepEnabled: Bool
     var updateChecksEnabled: Bool
     var ipcEnabled: Bool
+    var spacesTrackingEnabled: Bool
     var scrollGestureEnabled: Bool
     var scrollSensitivity: Double
     var scrollModifierKey: String
@@ -174,6 +175,7 @@ extension SettingsExport {
             preventSleepEnabled: false,
             updateChecksEnabled: true,
             ipcEnabled: false,
+            spacesTrackingEnabled: true,
             scrollGestureEnabled: true,
             scrollSensitivity: 5.0,
             scrollModifierKey: ScrollModifierKey.optionShift.rawValue,

@@ -34,6 +34,7 @@ struct CanonicalTOMLConfig: Codable, Equatable {
         var preventSleepEnabled: Bool
         var updateChecksEnabled: Bool
         var ipcEnabled: Bool
+        var spacesTrackingEnabled: Bool
         var animationsEnabled: Bool
     }
 
@@ -375,6 +376,12 @@ extension CanonicalTOMLConfig.General {
             Bool.self,
             forKey: .ipcEnabled,
             default: defaults.ipcEnabled,
+            recovering: recovering
+        )
+        spacesTrackingEnabled = try container.decode(
+            Bool.self,
+            forKey: .spacesTrackingEnabled,
+            default: defaults.spacesTrackingEnabled,
             recovering: recovering
         )
         animationsEnabled = try container.decode(
@@ -818,6 +825,7 @@ extension CanonicalTOMLConfig {
             preventSleepEnabled: export.preventSleepEnabled,
             updateChecksEnabled: export.updateChecksEnabled,
             ipcEnabled: export.ipcEnabled,
+            spacesTrackingEnabled: export.spacesTrackingEnabled,
             animationsEnabled: export.animationsEnabled
         )
         focus = Focus(
@@ -985,6 +993,7 @@ extension CanonicalTOMLConfig {
             preventSleepEnabled: general.preventSleepEnabled,
             updateChecksEnabled: general.updateChecksEnabled,
             ipcEnabled: general.ipcEnabled,
+            spacesTrackingEnabled: general.spacesTrackingEnabled,
             scrollGestureEnabled: gestures.scrollEnabled,
             scrollSensitivity: gestures.scrollSensitivity,
             scrollModifierKey: gestures.scrollModifierKey,

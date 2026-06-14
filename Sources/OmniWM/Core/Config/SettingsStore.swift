@@ -280,6 +280,10 @@ final class SettingsStore {
         }
     }
 
+    var spacesTrackingEnabled = SettingsStore.defaultExport.spacesTrackingEnabled {
+        didSet { scheduleSave() }
+    }
+
     var scrollGestureEnabled = SettingsStore.defaultExport.scrollGestureEnabled {
         didSet { scheduleSave() }
     }
@@ -552,6 +556,7 @@ final class SettingsStore {
             preventSleepEnabled: preventSleepEnabled,
             updateChecksEnabled: updateChecksEnabled,
             ipcEnabled: ipcEnabled,
+            spacesTrackingEnabled: spacesTrackingEnabled,
             scrollGestureEnabled: scrollGestureEnabled,
             scrollSensitivity: scrollSensitivity,
             scrollModifierKey: scrollModifierKey.rawValue,
@@ -664,6 +669,7 @@ final class SettingsStore {
         preventSleepEnabled = export.preventSleepEnabled
         updateChecksEnabled = export.updateChecksEnabled
         ipcEnabled = export.ipcEnabled
+        spacesTrackingEnabled = export.spacesTrackingEnabled
         scrollGestureEnabled = export.scrollGestureEnabled
         scrollSensitivity = export.scrollSensitivity
         scrollModifierKey = ScrollModifierKey(rawValue: export.scrollModifierKey) ?? .optionShift
