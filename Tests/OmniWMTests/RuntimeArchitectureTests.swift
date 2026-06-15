@@ -1234,7 +1234,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             reason: .axWindowChanged,
             affectedWorkspaceIds: [workspaceId]
         )
-        let task = try XCTUnwrap(controller.layoutRefreshController.layoutState.activeRefreshTask)
+        let task = try XCTUnwrap(controller.layoutRefreshController.layoutState.pendingDebounceTask)
 
         controller.layoutRefreshController.resetState()
         await task.value
@@ -1242,6 +1242,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertNil(controller.layoutRefreshController.layoutState.pendingRefresh)
         XCTAssertNil(controller.layoutRefreshController.layoutState.activeRefresh)
         XCTAssertNil(controller.layoutRefreshController.layoutState.activeRefreshTask)
+        XCTAssertNil(controller.layoutRefreshController.layoutState.pendingDebounceTask)
     }
 
     @MainActor

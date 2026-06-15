@@ -692,7 +692,7 @@ final class MouseEventHandler {
                 controller.workspaceManager.withNiriViewportState(for: wsId, mutate)
             }
         ) {
-            controller.layoutRefreshController.requestImmediateRelayout(reason: .interactiveGesture)
+            controller.layoutRefreshController.renderInteractiveResize(for: wsId)
         }
     }
 

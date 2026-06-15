@@ -168,6 +168,7 @@ import QuartzCore
         var hasCompletedInitialRefresh: Bool = false
         var didExecuteEffectPlan: Bool = false
         var refreshGeneration: UInt64 = 0
+        var pendingDebounceTask: Task<Void, Never>?
     }
 
     var layoutState = LayoutState()
@@ -860,6 +861,20 @@ import QuartzCore
         )
     }
 
+    func renderInteractiveResize(for workspaceId: WorkspaceDescriptor.ID) {
+        guard let controller,
+              let engine = controller.niriEngine,
+              let monitor = controller.workspaceManager.monitor(for: workspaceId)
+        else { return }
+        _ = niriHandler.applyFramesOnDemand(
+            wsId: workspaceId,
+            state: controller.workspaceManager.niriViewportState(for: workspaceId),
+            engine: engine,
+            monitor: monitor,
+            animationTime: nil
+        )
+    }
+
     func requestLayoutCommandRelayout(
         affectedWorkspaceIds: Set<WorkspaceDescriptor.ID>,
         postLayout: PostLayoutAction? = nil,
@@ -1000,9 +1015,28 @@ import QuartzCore
                 return
             }
         }
-        enqueueRefresh(
-            .init(kind: .relayout, reason: reason, affectedWorkspaceIds: affectedWorkspaceIds)
-        )
+        let refresh = ScheduledRefresh(kind: .relayout, reason: reason, affectedWorkspaceIds: affectedWorkspaceIds)
+        let debounce = policy.debounceInterval
+        if debounce > 0 {
+            enqueueDebouncedRelayout(refresh, debounce: debounce)
+        } else {
+            enqueueRefresh(refresh)
+        }
+    }
+
+    private func enqueueDebouncedRelayout(_ refresh: ScheduledRefresh, debounce intervalNanos: UInt64) {
+        if layoutState.activeRefresh != nil {
+            enqueueRefresh(refresh)
+            return
+        }
+        mergePendingRefresh(refresh)
+        guard layoutState.pendingDebounceTask == nil else { return }
+        layoutState.pendingDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: intervalNanos)
+            guard let self else { return }
+            self.layoutState.pendingDebounceTask = nil
+            self.startNextRefreshIfNeeded()
+        }
     }
 
     private func executeScheduledRelayout(refresh: ScheduledRefresh, generation: UInt64) async -> Bool {
@@ -1027,38 +1061,30 @@ import QuartzCore
         generation: UInt64
     ) async -> Bool {
         guard let controller else { return false }
-        guard isCurrentRefreshGeneration(generation) else { return false }
 
         if controller.isFrontmostAppLockScreen() || controller.isLockScreenActive {
             return false
         }
 
-        do {
-            let buildStart = CACurrentMediaTime()
-            var plan = buildRelayoutEffectPlan(
-                useScrollAnimationPath: useScrollAnimationPath,
-                recoverFocus: recoverFocus,
-                affectedWorkspaceIds: refresh.affectedWorkspaceIds
-            )
-            layoutBuildMetrics.recordBuild(
-                seconds: CACurrentMediaTime() - buildStart,
-                workspaceCount: plan.workspacePlans.count,
-                windowCount: plan.workspacePlans.reduce(0) {
-                    $0 + controller.workspaceManager.entries(in: $1.workspaceId).count
-                }
-            )
-            applyRefreshMetadata(refresh, to: &plan)
-            try Task.checkCancellation()
-            guard isCurrentRefreshGeneration(generation) else { return false }
-            return await executeEffectPlan(plan, generation: generation)
-        } catch {
-            return false
-        }
+        let buildStart = CACurrentMediaTime()
+        var plan = buildRelayoutEffectPlan(
+            useScrollAnimationPath: useScrollAnimationPath,
+            recoverFocus: recoverFocus,
+            affectedWorkspaceIds: refresh.affectedWorkspaceIds
+        )
+        layoutBuildMetrics.recordBuild(
+            seconds: CACurrentMediaTime() - buildStart,
+            workspaceCount: plan.workspacePlans.count,
+            windowCount: plan.workspacePlans.reduce(0) {
+                $0 + controller.workspaceManager.entries(in: $1.workspaceId).count
+            }
+        )
+        applyRefreshMetadata(refresh, to: &plan)
+        return await executeEffectPlan(plan, generation: generation)
     }
 
     private func executeVisibilityRefresh(refresh: ScheduledRefresh, generation: UInt64) async -> Bool {
         guard let controller else { return false }
-        guard isCurrentRefreshGeneration(generation) else { return false }
 
         if controller.isFrontmostAppLockScreen() || controller.isLockScreenActive {
             return false
@@ -1066,8 +1092,6 @@ import QuartzCore
 
         var plan = buildVisibilityEffectPlan()
         applyRefreshMetadata(refresh, to: &plan)
-        guard !Task.isCancelled else { return false }
-        guard isCurrentRefreshGeneration(generation) else { return false }
         return await executeEffectPlan(plan, generation: generation)
     }
 
@@ -1098,25 +1122,20 @@ import QuartzCore
     private func executeWindowRemoval(refresh: ScheduledRefresh, generation: UInt64) async -> Bool {
         let payloads = refresh.windowRemovalPayloads
         guard let controller else { return false }
-        guard isCurrentRefreshGeneration(generation) else { return false }
         if controller.isFrontmostAppLockScreen() || controller.isLockScreenActive {
             return false
         }
 
-        do {
-            var plan = buildWindowRemovalEffectPlan(payloads: payloads)
-            applyRefreshMetadata(refresh, to: &plan)
-            try Task.checkCancellation()
-            guard isCurrentRefreshGeneration(generation) else { return false }
-            return await executeEffectPlan(plan, generation: generation)
-        } catch {
-            return false
-        }
+        var plan = buildWindowRemovalEffectPlan(payloads: payloads)
+        applyRefreshMetadata(refresh, to: &plan)
+        return await executeEffectPlan(plan, generation: generation)
     }
 
     func resetState() {
         layoutState.activeRefreshTask?.cancel()
         layoutState.activeRefreshTask = nil
+        layoutState.pendingDebounceTask?.cancel()
+        layoutState.pendingDebounceTask = nil
         layoutState.activeRefresh = nil
         layoutState.pendingRefresh = nil
         layoutState.didExecuteEffectPlan = false
@@ -2001,12 +2020,6 @@ import QuartzCore
             case .fullRescan:
                 return try await executeFullRefresh(refresh: refresh, generation: generation)
             case .relayout:
-                let policy = refresh.reason.relayoutSchedulingPolicy
-                if policy.debounceInterval > 0 {
-                    try await Task.sleep(nanoseconds: policy.debounceInterval)
-                }
-                try Task.checkCancellation()
-                guard isCurrentRefreshGeneration(generation) else { return false }
                 return await executeScheduledRelayout(refresh: refresh, generation: generation)
             case .immediateRelayout:
                 return await executeImmediateRelayout(refresh: refresh, generation: generation)
