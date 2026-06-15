@@ -234,6 +234,10 @@ final class WorkspaceManager {
         ReconcileDebugDump.trace(world.traceRecords(), limit: limit)
     }
 
+    func invariantViolationCountsDump() -> String {
+        world.invariantViolationCountsDump()
+    }
+
     var worldSeq: UInt64 {
         world.seq
     }

@@ -50,6 +50,7 @@ final class WorldStore {
     private let trace = ReconcileTraceRecorder()
     private let nowProvider: () -> Date
     private(set) var seq: UInt64 = 0
+    private(set) var invariantViolationCounts: [String: Int] = [:]
     private(set) var focus = FocusSessionSnapshot()
     private(set) var viewports: [WorkspaceDescriptor.ID: ViewportState] = [:]
     private(set) var scratchpadToken: WindowToken?
@@ -115,6 +116,9 @@ final class WorldStore {
         var tracedPlan = resolvedPlan
         if !invariantViolations.isEmpty {
             tracedPlan.notes.append(contentsOf: invariantViolations.map(\.traceNote))
+            for violation in invariantViolations {
+                invariantViolationCounts[violation.code, default: 0] += 1
+            }
             let assertable = invariantViolations.filter { $0.severity == .assert }
             if !assertable.isEmpty {
                 assertionFailure(
@@ -138,6 +142,13 @@ final class WorldStore {
 
     func traceRecords() -> [ReconcileTraceRecord] {
         trace.snapshot()
+    }
+
+    func invariantViolationCountsDump() -> String {
+        guard !invariantViolationCounts.isEmpty else { return "clean" }
+        return invariantViolationCounts.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
     }
 
     func noteInvalidation(workspaceId: WorkspaceDescriptor.ID?, domains: InvalidationDomain) {

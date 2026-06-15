@@ -286,7 +286,8 @@ final class IPCQueryRouter {
         IPCReconcileDebugQueryResult(
             snapshot: controller.workspaceManager.reconcileSnapshotDump(),
             trace: controller.workspaceManager.reconcileTraceDump(limit: traceLimit),
-            metrics: controller.layoutRefreshController.layoutBuildMetricsDump(),
+            metrics: controller.layoutRefreshController.layoutBuildMetricsDump()
+                + "\ninvariants: " + controller.workspaceManager.invariantViolationCountsDump(),
             traceLimit: traceLimit
         )
     }
