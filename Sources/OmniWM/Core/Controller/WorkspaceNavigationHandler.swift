@@ -31,37 +31,6 @@ final class WorkspaceNavigationHandler {
         )
     }
 
-    private func applySessionTransfer(
-        sourceWorkspaceId: WorkspaceDescriptor.ID?,
-        sourceState: ViewportState?,
-        sourceFocusedToken: WindowToken?,
-        targetWorkspaceId: WorkspaceDescriptor.ID?,
-        targetState: ViewportState?,
-        targetFocusedToken: WindowToken?
-    ) {
-        guard let controller else { return }
-        _ = controller.workspaceManager.applySessionTransfer(
-            .init(
-                sourcePatch: sourceWorkspaceId.map {
-                    .init(
-                        workspaceId: $0,
-                        viewportState: sourceState,
-                        rememberedFocusToken: sourceFocusedToken,
-                        plannedSeq: controller.workspaceManager.worldSeq
-                    )
-                },
-                targetPatch: targetWorkspaceId.map {
-                    .init(
-                        workspaceId: $0,
-                        viewportState: targetState,
-                        rememberedFocusToken: targetFocusedToken,
-                        plannedSeq: controller.workspaceManager.worldSeq
-                    )
-                }
-            )
-        )
-    }
-
     private func recordLayoutOperation(
         _ operation: LayoutOperation,
         in workspaceId: WorkspaceDescriptor.ID
@@ -457,30 +426,25 @@ final class WorkspaceNavigationHandler {
            let engine = controller.niriEngine,
            let windowNode = engine.findNode(for: token)
         {
-            var sourceState = controller.workspaceManager.niriViewportState(for: sourceWsId)
-            var targetState = controller.workspaceManager.niriViewportState(for: targetWsId)
-            if let result = controller.workspaceManager.withEngineMutationScope({
-                engine.moveWindowToWorkspace(
+            let result = controller.workspaceManager.withBatchedWorkspaceMove(
+                sourceWorkspaceId: sourceWsId,
+                targetWorkspaceId: targetWsId
+            ) { sourceState, targetState in
+                guard let moveResult = engine.moveWindowToWorkspace(
                     windowNode,
                     from: sourceWsId,
                     to: targetWsId,
                     sourceState: &sourceState,
                     targetState: &targetState
-                )
-            }) {
+                ) else { return nil }
+                return (moveResult, [token])
+            }
+            if let result {
                 if let newFocusId = result.newFocusNodeId,
                    let newFocusNode = engine.findNode(by: newFocusId) as? NiriWindow
                 {
                     newSourceFocusToken = newFocusNode.token
                 }
-                applySessionTransfer(
-                    sourceWorkspaceId: sourceWsId,
-                    sourceState: sourceState,
-                    sourceFocusedToken: newSourceFocusToken,
-                    targetWorkspaceId: targetWsId,
-                    targetState: targetState,
-                    targetFocusedToken: nil
-                )
                 movedWithNiri = true
             }
         }
@@ -490,42 +454,32 @@ final class WorkspaceNavigationHandler {
            let sourceWsId,
            let engine = controller.niriEngine
         {
-            var sourceState = controller.workspaceManager.niriViewportState(for: sourceWsId)
-            if let currentNode = engine.findNode(for: token),
-               sourceState.selectedNodeId == currentNode.id
-            {
-                sourceState.selectedNodeId = engine.fallbackSelectionOnRemoval(
-                    removing: currentNode.id,
-                    in: sourceWsId
-                )
-            }
+            controller.workspaceManager.withBatchedNiriSourceMutation(workspaceId: sourceWsId) { sourceState in
+                if let currentNode = engine.findNode(for: token),
+                   sourceState.selectedNodeId == currentNode.id
+                {
+                    sourceState.selectedNodeId = engine.fallbackSelectionOnRemoval(
+                        removing: currentNode.id,
+                        in: sourceWsId
+                    )
+                }
 
-            if targetIsDwindle, engine.findNode(for: token) != nil {
-                controller.workspaceManager.withEngineMutationScope {
+                if targetIsDwindle, engine.findNode(for: token) != nil {
                     engine.removeWindow(token: token)
                 }
-            }
 
-            if let selectedId = sourceState.selectedNodeId,
-               engine.findNode(by: selectedId) == nil
-            {
-                sourceState.selectedNodeId = engine.validateSelection(selectedId, in: sourceWsId)
-            }
+                if let selectedId = sourceState.selectedNodeId,
+                   engine.findNode(by: selectedId) == nil
+                {
+                    sourceState.selectedNodeId = engine.validateSelection(selectedId, in: sourceWsId)
+                }
 
-            if let selectedId = sourceState.selectedNodeId,
-               let selectedNode = engine.findNode(by: selectedId) as? NiriWindow
-            {
-                newSourceFocusToken = selectedNode.token
+                if let selectedId = sourceState.selectedNodeId,
+                   let selectedNode = engine.findNode(by: selectedId) as? NiriWindow
+                {
+                    newSourceFocusToken = selectedNode.token
+                }
             }
-
-            applySessionTransfer(
-                sourceWorkspaceId: sourceWsId,
-                sourceState: sourceState,
-                sourceFocusedToken: newSourceFocusToken,
-                targetWorkspaceId: nil,
-                targetState: nil,
-                targetFocusedToken: nil
-            )
         } else if sourceIsDwindle,
                   let sourceWsId,
                   let dwindleEngine = controller.dwindleEngine
@@ -546,8 +500,13 @@ final class WorkspaceNavigationHandler {
             succeeded = true
         }
 
-        if succeeded, let sourceWsId {
-            recordLayoutOperation(.windowMovedToWorkspace(token: token, to: targetWsId), in: sourceWsId)
+        if succeeded {
+            if !movedWithNiri {
+                controller.reassignManagedWindow(token, to: targetWsId)
+            }
+            if let sourceWsId {
+                recordLayoutOperation(.windowMovedToWorkspace(token: token, to: targetWsId), in: sourceWsId)
+            }
         }
 
         return WindowTransferResult(succeeded: succeeded, newSourceFocusToken: newSourceFocusToken)
@@ -569,7 +528,6 @@ final class WorkspaceNavigationHandler {
         let transferResult = transferWindowFromSourceEngine(token: token, from: wsId, to: targetWorkspace.id)
         guard transferResult.succeeded else { return }
 
-        controller.reassignManagedWindow(token, to: targetWorkspace.id)
         applySessionPatch(workspaceId: targetWorkspace.id, rememberedFocusToken: token)
 
         let sourceState = controller.workspaceManager.niriViewportState(for: wsId)
@@ -603,40 +561,30 @@ final class WorkspaceNavigationHandler {
 
         saveNiriViewportState(for: wsId)
 
-        var sourceState = controller.workspaceManager.niriViewportState(for: wsId)
-        var targetState = controller.workspaceManager.niriViewportState(for: targetWorkspace.id)
-
         guard let windowNode = engine.findNode(for: token),
               let column = engine.findColumn(containing: windowNode, in: wsId)
         else {
             return
         }
 
-        guard let result = controller.workspaceManager.withEngineMutationScope({
-            engine.moveColumnToWorkspace(
-                column,
-                from: wsId,
-                to: targetWorkspace.id,
-                sourceState: &sourceState,
-                targetState: &targetState
-            )
-        }) else {
+        guard let result = controller.workspaceManager.withBatchedWorkspaceMove(
+            sourceWorkspaceId: wsId,
+            targetWorkspaceId: targetWorkspace.id,
+            { sourceState, targetState in
+                guard let moveResult = engine.moveColumnToWorkspace(
+                    column,
+                    from: wsId,
+                    to: targetWorkspace.id,
+                    sourceState: &sourceState,
+                    targetState: &targetState
+                ) else { return nil }
+                return (moveResult, column.windowNodes.map(\.token))
+            }
+        ) else {
             return
         }
 
-        applySessionTransfer(
-            sourceWorkspaceId: wsId,
-            sourceState: sourceState,
-            sourceFocusedToken: nil,
-            targetWorkspaceId: targetWorkspace.id,
-            targetState: targetState,
-            targetFocusedToken: nil
-        )
         recordLayoutOperation(.columnMovedToWorkspace(to: targetWorkspace.id), in: wsId)
-
-        for window in column.windowNodes {
-            controller.reassignManagedWindow(window.token, to: targetWorkspace.id)
-        }
 
         applySessionPatch(workspaceId: targetWorkspace.id, rememberedFocusToken: token)
 
@@ -674,41 +622,33 @@ final class WorkspaceNavigationHandler {
 
         saveNiriViewportState(for: wsId)
 
-        var sourceState = controller.workspaceManager.niriViewportState(for: wsId)
-        var targetState = controller.workspaceManager.niriViewportState(for: targetWsId)
+        let currentSelection = controller.workspaceManager.niriViewportState(for: wsId)
 
-        guard let currentId = sourceState.selectedNodeId,
+        guard let currentId = currentSelection.selectedNodeId,
               let windowNode = engine.findNode(by: currentId) as? NiriWindow,
               let column = engine.findColumn(containing: windowNode, in: wsId)
         else {
             return
         }
 
-        guard let result = controller.workspaceManager.withEngineMutationScope({
-            engine.moveColumnToWorkspace(
-                column,
-                from: wsId,
-                to: targetWsId,
-                sourceState: &sourceState,
-                targetState: &targetState
-            )
-        }) else {
+        guard let result = controller.workspaceManager.withBatchedWorkspaceMove(
+            sourceWorkspaceId: wsId,
+            targetWorkspaceId: targetWsId,
+            { sourceState, targetState in
+                guard let moveResult = engine.moveColumnToWorkspace(
+                    column,
+                    from: wsId,
+                    to: targetWsId,
+                    sourceState: &sourceState,
+                    targetState: &targetState
+                ) else { return nil }
+                return (moveResult, column.windowNodes.map(\.token))
+            }
+        ) else {
             return
         }
 
-        applySessionTransfer(
-            sourceWorkspaceId: wsId,
-            sourceState: sourceState,
-            sourceFocusedToken: nil,
-            targetWorkspaceId: targetWsId,
-            targetState: targetState,
-            targetFocusedToken: nil
-        )
         recordLayoutOperation(.columnMovedToWorkspace(to: targetWsId), in: wsId)
-
-        for window in column.windowNodes {
-            controller.reassignManagedWindow(window.token, to: targetWsId)
-        }
 
         applySessionPatch(workspaceId: targetWsId, rememberedFocusToken: token)
 
@@ -744,8 +684,6 @@ final class WorkspaceNavigationHandler {
         let currentWorkspaceId = controller.workspaceManager.workspace(for: token)
         let transferResult = transferWindowFromSourceEngine(token: token, from: currentWorkspaceId, to: target.id)
         guard transferResult.succeeded else { return }
-
-        controller.reassignManagedWindow(token, to: target.id)
 
         let shouldFollowFocus = controller.settings.focusFollowsWindowToMonitor
         if shouldFollowFocus {
@@ -837,7 +775,6 @@ final class WorkspaceNavigationHandler {
         )
         guard transferResult.succeeded else { return false }
 
-        controller.reassignManagedWindow(token, to: targetWsId)
         applySessionPatch(workspaceId: targetWsId, rememberedFocusToken: token)
 
         if let currentWorkspaceId {
@@ -873,8 +810,6 @@ final class WorkspaceNavigationHandler {
             token: token, from: currentWorkspaceId, to: targetWsId
         )
         guard transferResult.succeeded else { return }
-
-        controller.reassignManagedWindow(token, to: targetWsId)
 
         let shouldFollowFocus = controller.settings.focusFollowsWindowToMonitor
 

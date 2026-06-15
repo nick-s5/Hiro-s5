@@ -112,7 +112,9 @@ final class WorldStore {
         applyWindowMutation(event, phase: .afterPlan, monitors: monitors)
 
         let committedSnapshot = snapshot()
-        let invariantViolations = InvariantChecks.validate(snapshot: committedSnapshot)
+        let invariantViolations = commitDepth == 1
+            ? InvariantChecks.validate(snapshot: committedSnapshot)
+            : []
         var tracedPlan = resolvedPlan
         if !invariantViolations.isEmpty {
             tracedPlan.notes.append(contentsOf: invariantViolations.map(\.traceNote))
@@ -213,9 +215,10 @@ final class WorldStore {
             _ = niriEngine?.rekeyWindow(from: from, to: to)
             _ = dwindleEngine?.rekeyWindow(from: from, to: to, in: workspaceId)
 
-        case let .windowRemoved(token, _, _):
+        case let .windowRemoved(token, workspaceId, _):
             guard phase == .afterPlan else { return }
             model.removeWindow(key: token)
+            removeLayoutNode(for: token, in: workspaceId)
 
         case let .workspaceAssigned(token, _, to, _, _):
             guard phase == .beforePlan else { return }
@@ -475,6 +478,18 @@ extension WorldStore {
     func updateFocus<T>(_ mutate: (inout FocusSessionSnapshot) -> T) -> T {
         assertInCommit("updateFocus")
         return mutate(&focus)
+    }
+
+    private func removeLayoutNode(for token: WindowToken, in workspaceId: WorkspaceDescriptor.ID?) {
+        guard let engine = niriEngine, let node = engine.findNode(for: token) else { return }
+        if let workspaceId,
+           var state = viewports[workspaceId],
+           state.selectedNodeId == node.id
+        {
+            state.selectedNodeId = engine.fallbackSelectionOnRemoval(removing: node.id, in: workspaceId)
+            applyViewportPlan(.set(workspaceId: workspaceId, state: state))
+        }
+        engine.removeWindow(token: token)
     }
 
     func layoutTopology(for workspaceId: WorkspaceDescriptor.ID) -> LayoutTopology {

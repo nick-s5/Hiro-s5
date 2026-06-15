@@ -90,11 +90,6 @@ struct WorkspaceSessionPatch {
     var plannedSeq: UInt64 = 0
 }
 
-struct WorkspaceSessionTransfer {
-    var sourcePatch: WorkspaceSessionPatch?
-    var targetPatch: WorkspaceSessionPatch?
-}
-
 enum AnimationDirective {
     case none
     case startNiriScroll(workspaceId: WorkspaceDescriptor.ID)

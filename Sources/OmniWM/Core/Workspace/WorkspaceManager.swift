@@ -1545,20 +1545,6 @@ final class WorkspaceManager {
         return changed
     }
 
-    @discardableResult
-    func applySessionTransfer(_ transfer: WorkspaceSessionTransfer) -> Bool {
-        var changed = false
-
-        if let sourcePatch = transfer.sourcePatch {
-            changed = applySessionPatch(sourcePatch) || changed
-        }
-
-        if let targetPatch = transfer.targetPatch {
-            changed = applySessionPatch(targetPatch) || changed
-        }
-
-        return changed
-    }
 
     func lastFocusedToken(in workspaceId: WorkspaceDescriptor.ID) -> WindowToken? {
         world.focus.lastTiledFocusedByWorkspace[workspaceId]
@@ -2931,6 +2917,51 @@ final class WorkspaceManager {
             resolvePlan: { plan, _ in plan }
         )
         return plans
+    }
+
+    @discardableResult
+    func withBatchedWorkspaceMove(
+        sourceWorkspaceId: WorkspaceDescriptor.ID,
+        targetWorkspaceId: WorkspaceDescriptor.ID,
+        _ engineMove: (inout ViewportState, inout ViewportState)
+            -> (result: NiriLayoutEngine.WorkspaceMoveResult, tokens: [WindowToken])?
+    ) -> NiriLayoutEngine.WorkspaceMoveResult? {
+        var sourceState = niriViewportState(for: sourceWorkspaceId)
+        var targetState = niriViewportState(for: targetWorkspaceId)
+        var captured: NiriLayoutEngine.WorkspaceMoveResult?
+        world.commit(
+            .userCommand(workspaceId: nil, source: .command),
+            monitors: monitors,
+            snapshot: { self.reconcileSnapshot() },
+            preMutate: {
+                guard let moved = engineMove(&sourceState, &targetState) else { return }
+                captured = moved.result
+                self.applyViewportInBatch(sourceState, for: sourceWorkspaceId)
+                self.applyViewportInBatch(targetState, for: targetWorkspaceId)
+                for token in moved.tokens {
+                    self.setWorkspace(for: token, to: targetWorkspaceId)
+                }
+            },
+            resolvePlan: { plan, _ in plan }
+        )
+        return captured
+    }
+
+    func withBatchedNiriSourceMutation(
+        workspaceId: WorkspaceDescriptor.ID,
+        _ engineMutation: (inout ViewportState) -> Void
+    ) {
+        var sourceState = niriViewportState(for: workspaceId)
+        world.commit(
+            .userCommand(workspaceId: nil, source: .command),
+            monitors: monitors,
+            snapshot: { self.reconcileSnapshot() },
+            preMutate: {
+                engineMutation(&sourceState)
+                self.applyViewportInBatch(sourceState, for: workspaceId)
+            },
+            resolvePlan: { plan, _ in plan }
+        )
     }
 
     private func applyViewportInBatch(_ state: ViewportState, for workspaceId: WorkspaceDescriptor.ID) {
