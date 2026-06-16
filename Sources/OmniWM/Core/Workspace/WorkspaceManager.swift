@@ -1438,7 +1438,7 @@ final class WorkspaceManager {
 
         let onFullscreenSpace = topology.isFullscreenSpace(spaceId)
         let isSuspended = entry.layoutReason == .nativeFullscreen
-        if onFullscreenSpace, !isSuspended, spaceId == topology.activeSpaceId {
+        if onFullscreenSpace, !isSuspended, topology.isCurrentSpace(spaceId) {
             return markNativeFullscreenSuspended(entry.token)
         }
         if !onFullscreenSpace, isSuspended {

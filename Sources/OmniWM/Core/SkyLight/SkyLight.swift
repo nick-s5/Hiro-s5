@@ -6,6 +6,12 @@ enum SkyLightWindowOrder: Int32 {
     case below = -1
 }
 
+enum DisplaySpacesMode: Equatable, Sendable {
+    case enabled
+    case disabled
+    case unavailable
+}
+
 struct ManagedDisplaySpaces: Sendable {
     let displayIdentifier: String
     let spaceIds: [UInt64]
@@ -66,6 +72,7 @@ final class SkyLight {
     private typealias CopyManagedDisplaySpacesFunc = @convention(c) (Int32) -> CFArray?
     private typealias GetActiveSpaceFunc = @convention(c) (Int32) -> UInt64
     private typealias CopySpacesForWindowsFunc = @convention(c) (Int32, Int32, CFArray) -> CFArray?
+    private typealias GetSpaceManagementModeFunc = @convention(c) (Int32) -> Int32
     private typealias DisplayCreateUUIDFromDisplayIDFunc = @convention(c) (CGDirectDisplayID) -> Unmanaged<CFUUID>?
 
     typealias ConnectionNotifyCallback = @convention(c) (
@@ -149,6 +156,7 @@ final class SkyLight {
     private let copyManagedDisplaySpaces: CopyManagedDisplaySpacesFunc?
     private let getActiveSpace: GetActiveSpaceFunc?
     private let copySpacesForWindows: CopySpacesForWindowsFunc?
+    private let getSpaceManagementMode: GetSpaceManagementModeFunc?
 
     private static let allSpacesMask: Int32 = 0x7
     private static let fullscreenSpaceType = 4
@@ -295,6 +303,7 @@ final class SkyLight {
             ?? resolveOptional("CGSGetActiveSpace", as: GetActiveSpaceFunc.self)
         copySpacesForWindows = resolveOptional("SLSCopySpacesForWindows", as: CopySpacesForWindowsFunc.self)
             ?? resolveOptional("CGSCopySpacesForWindows", as: CopySpacesForWindowsFunc.self)
+        getSpaceManagementMode = resolveOptional("SLSGetSpaceManagementMode", as: GetSpaceManagementModeFunc.self)
     }
 
     func getMainConnectionID() -> Int32 {
@@ -412,23 +421,29 @@ final class SkyLight {
         return space != 0 ? space : nil
     }
 
-    func spaceForWindow(_ windowId: UInt32) -> UInt64? {
-        guard let copySpacesForWindows else { return nil }
+    var displaysHaveSeparateSpaces: DisplaySpacesMode {
+        guard let getSpaceManagementMode else { return .unavailable }
         let cid = getMainConnectionID()
-        guard cid != 0 else { return nil }
+        guard cid != 0 else { return .unavailable }
+        return getSpaceManagementMode(cid) == 1 ? .enabled : .disabled
+    }
+
+    func spacesForWindow(_ windowId: UInt32) -> [UInt64] {
+        guard let copySpacesForWindows else { return [] }
+        let cid = getMainConnectionID()
+        guard cid != 0 else { return [] }
         var widValue = Int32(bitPattern: windowId)
-        guard let widNumber = CFNumberCreate(nil, .sInt32Type, &widValue) else { return nil }
+        guard let widNumber = CFNumberCreate(nil, .sInt32Type, &widValue) else { return [] }
         defer { cfRelease(widNumber) }
         let windowArray = [widNumber] as CFArray
-        guard let result = copySpacesForWindows(cid, Self.allSpacesMask, windowArray) else { return nil }
+        guard let result = copySpacesForWindows(cid, Self.allSpacesMask, windowArray) else { return [] }
         defer { cfRelease(result) }
-        guard let spaceValues = result as? [Any] else { return nil }
-        for value in spaceValues {
-            if let spaceId = Self.numericUInt64(value), spaceId != 0 {
-                return spaceId
-            }
-        }
-        return nil
+        guard let spaceValues = result as? [Any] else { return [] }
+        return spaceValues.compactMap(Self.numericUInt64).filter { $0 != 0 }
+    }
+
+    func spaceForWindow(_ windowId: UInt32) -> UInt64? {
+        spacesForWindow(windowId).first
     }
 
     func managedSpaces() -> [ManagedDisplaySpaces] {

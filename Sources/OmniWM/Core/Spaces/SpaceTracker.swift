@@ -8,16 +8,12 @@ final class SpaceTracker {
         self.controller = controller
     }
 
-    private var isEnabled: Bool {
-        controller?.settings.spacesTrackingEnabled ?? false
-    }
-
     func start() {
         refresh()
     }
 
     func refresh() {
-        guard let controller, isEnabled else { return }
+        guard let controller else { return }
         let managed = SkyLight.shared.managedSpaces()
         guard !managed.isEmpty else { return }
 
@@ -33,7 +29,9 @@ final class SpaceTracker {
         topology.activeSpaceId = SkyLight.shared.activeSpace() ?? 0
         for entry in controller.workspaceManager.allEntries() {
             let windowId = entry.windowId
-            guard windowId > 0, let spaceId = SkyLight.shared.spaceForWindow(UInt32(windowId)) else { continue }
+            guard windowId > 0 else { continue }
+            let candidates = SkyLight.shared.spacesForWindow(UInt32(windowId))
+            guard let spaceId = topology.selectWindowSpace(from: candidates) else { continue }
             topology.windowSpace[windowId] = spaceId
         }
         controller.workspaceManager.commitSpaceTopology(topology)
@@ -41,7 +39,7 @@ final class SpaceTracker {
     }
 
     func noteWindowSpace(windowId: Int, spaceId: UInt64) {
-        guard let controller, isEnabled, spaceId != 0 else { return }
+        guard let controller, spaceId != 0 else { return }
         guard let entry = controller.workspaceManager.entry(forWindowId: windowId) else { return }
         var topology = controller.workspaceManager.spaceTopology
         if topology.activeSpaceId == 0 || !topology.isKnownSpace(spaceId) {
@@ -53,7 +51,7 @@ final class SpaceTracker {
     }
 
     func noteWindowDestroyed(windowId: Int) {
-        guard let controller, isEnabled else { return }
+        guard let controller else { return }
         var topology = controller.workspaceManager.spaceTopology
         guard topology.windowSpace.removeValue(forKey: windowId) != nil else { return }
         controller.workspaceManager.commitSpaceTopology(topology)

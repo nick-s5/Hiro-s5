@@ -2956,6 +2956,51 @@ final class RuntimeArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testNativeFullscreenSuspendsOnSecondaryDisplayCurrentSpace() throws {
+        let controller = Self.controller()
+        let ws = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
+        _ = controller.workspaceManager.focusWorkspace(named: "1")
+        controller.niriLayoutHandler.enableNiriLayout()
+
+        let targetToken = controller.workspaceManager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(933_001), windowId: 933_101),
+            pid: 933_001, windowId: 933_101, to: ws
+        )
+        _ = controller.niriEngine?.addWindow(token: targetToken, to: ws, afterSelection: nil)
+
+        let primarySpaceId: UInt64 = 9_330
+        let secondaryFullscreenSpaceId: UInt64 = 9_331
+        controller.workspaceManager.commitSpaceTopology(
+            SpaceTopology(
+                displays: [
+                    SpaceTopology.DisplaySpaces(
+                        displayIdentifier: "primary",
+                        spaceIds: [primarySpaceId],
+                        currentSpaceId: primarySpaceId
+                    ),
+                    SpaceTopology.DisplaySpaces(
+                        displayIdentifier: "secondary",
+                        spaceIds: [secondaryFullscreenSpaceId],
+                        currentSpaceId: secondaryFullscreenSpaceId
+                    ),
+                ],
+                activeSpaceId: primarySpaceId,
+                fullscreenSpaceIds: [secondaryFullscreenSpaceId],
+                windowSpace: [:]
+            )
+        )
+
+        controller.spaceTracker.noteWindowSpace(
+            windowId: targetToken.windowId,
+            spaceId: secondaryFullscreenSpaceId
+        )
+
+        let record = try XCTUnwrap(controller.workspaceManager.nativeFullscreenRecord(for: targetToken))
+        XCTAssertEqual(record.transition, .suspended)
+        XCTAssertEqual(controller.workspaceManager.layoutReason(for: targetToken), .nativeFullscreen)
+    }
+
+    @MainActor
     func testNativeFullscreenDestroyUsesObservedFullscreenSpaceBeforeAXFallback() throws {
         let controller = Self.controller()
         let ws = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))

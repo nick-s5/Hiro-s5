@@ -176,7 +176,7 @@ OmniWM is built for high responsiveness and smooth, crisp animations.
 - macOS 15+ (Sequoia)
 - Accessibility permissions (prompted on launch)
 - Input Monitoring permission for custom Hyper key shortcuts
-- Displays have separate spaces **OFF**
+- Displays have separate spaces **ON** (the macOS default; OmniWM pauses window management until it is enabled)
 
 ## Installation
 
@@ -191,8 +191,8 @@ brew install omniwm
 
 1. Download the latest `OmniWM.zip` from [Releases](https://github.com/BarutSRB/OmniWM/releases)
 2. Extract and move `OmniWM.app` to `/Applications`
-3. In System Settings > Desktop & Dock > Mission Control, turn **OFF** `Displays have separate Spaces`
-4. Log out of macOS and log back in for that change to take effect unless you had it off already
+3. In System Settings > Desktop & Dock > Mission Control, turn **ON** `Displays have separate Spaces`
+4. Log out of macOS and log back in for that change to take effect unless you had it on already
 5. Launch OmniWM and grant Accessibility permissions when prompted
 6. For custom Hyper key shortcuts, grant Input Monitoring from Settings > Hotkeys
 
@@ -226,14 +226,15 @@ For setup, installation options, commands, queries, rules, subscriptions, and se
 ## Quick Start
 
 1. Launch OmniWM from your Applications folder
-2. In System Settings > Desktop & Dock > Mission Control, turn **OFF** `Displays have separate Spaces`
-3. Log out of macOS and log back in for that change to take effect unless you had it off already
+2. In System Settings > Desktop & Dock > Mission Control, turn **ON** `Displays have separate Spaces`
+3. Log out of macOS and log back in for that change to take effect unless you had it on already
 4. Grant Accessibility permissions in System Settings > Privacy & Security > Accessibility
 5. Windows will automatically tile in columns
-6. Use the default shortcuts in `Keyboard Shortcuts` to navigate between windows
-7. Click the menu bar icon to access Settings, including `Settings > General > Updates`
-8. Use `Check for Updates...` from the status bar menu whenever you want to run a manual update check
-9. In case you freak out and don't see all your status bar icons, relax, right click on OmniWM's status bar icon and drag the icons to the left of it's "/" by holding CMD + drag as OmniWM hides status bar icons like **Ice Bar**.
+6. Keep one macOS Space per display and navigate with OmniWM workspaces; extra native Spaces are tolerated (their windows are left to macOS, not tiled)
+7. Use the default shortcuts in `Keyboard Shortcuts` to navigate between windows
+8. Click the menu bar icon to access Settings, including `Settings > General > Updates`
+9. Use `Check for Updates...` from the status bar menu whenever you want to run a manual update check
+10. In case you freak out and don't see all your status bar icons, relax, right click on OmniWM's status bar icon and drag the icons to the left of it's "/" by holding CMD + drag as OmniWM hides status bar icons like **Ice Bar**.
 
 
 ## User Guide

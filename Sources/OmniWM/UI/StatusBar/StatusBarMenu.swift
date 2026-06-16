@@ -66,6 +66,8 @@ final class StatusBarMenuBuilder {
 
         menu.addItem(createDivider())
 
+        addSeparateSpacesWarning(to: menu)
+
         menu.addItem(createSectionLabel("CONTROLS"))
         addControlsSection(to: menu)
 
@@ -104,6 +106,19 @@ final class StatusBarMenuBuilder {
         toggleViews["workspaceBarEnabled"]?.isOn = settings.workspaceBarEnabled
         toggleViews["preventSleepEnabled"]?.isOn = settings.preventSleepEnabled
         toggleViews["ipcEnabled"]?.isOn = settings.ipcEnabled
+    }
+
+    private func addSeparateSpacesWarning(to menu: NSMenu) {
+        guard let mode = controller?.displaySpacesMode, mode != .enabled else { return }
+        let item = NSMenuItem()
+        item.view = MenuInfoRowView(
+            icon: "exclamationmark.triangle.fill",
+            label: mode == .disabled
+                ? "Enable “Displays have separate Spaces”"
+                : "Could not verify display Spaces setting"
+        )
+        menu.addItem(item)
+        menu.addItem(createDivider())
     }
 
     private func createHeaderView() -> NSView {

@@ -473,7 +473,23 @@ final class AXEventHandler {
     private func handleCGSWindowCreated(windowId: UInt32, spaceId: UInt64) {
         captureCreatePlacementContext(windowId: windowId, spaceId: spaceId)
         recordNiriCreateFocusTrace(.init(kind: .createSeen(windowId: windowId)))
+        if shouldDeferCreateForInactiveNativeSpace(spaceId) {
+            deferCreatedWindow(windowId)
+            return
+        }
         processCreatedWindow(windowId: windowId)
+    }
+
+    private func shouldDeferCreateForInactiveNativeSpace(_ spaceId: UInt64) -> Bool {
+        guard spaceId != 0, let controller else { return false }
+        let topology = controller.workspaceManager.spaceTopology
+        return topology.isKnownSpace(spaceId) && !topology.isCurrentSpace(spaceId)
+    }
+
+    private func liveCreateSpace(for windowId: UInt32) -> UInt64 {
+        guard let controller else { return 0 }
+        return controller.workspaceManager.spaceTopology
+            .selectWindowSpace(from: SkyLight.shared.spacesForWindow(windowId)) ?? 0
     }
 
     private func processCreatedWindow(windowId: UInt32) {
@@ -989,6 +1005,10 @@ final class AXEventHandler {
             let token = WindowToken(pid: pid_t(windowInfo.pid), windowId: Int(windowId))
             if controller.workspaceManager.entry(for: token) != nil {
                 discardCreatePlacementContext(windowId: windowId)
+                continue
+            }
+            if shouldDeferCreateForInactiveNativeSpace(liveCreateSpace(for: windowId)) {
+                deferCreatedWindow(windowId)
                 continue
             }
             guard let candidate = prepareCreateCandidate(

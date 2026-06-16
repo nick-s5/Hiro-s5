@@ -77,7 +77,8 @@ final class AXManager {
 
     func updateInactiveWorkspaceWindows(
         allEntries: [(workspaceId: WorkspaceDescriptor.ID, windowId: Int)],
-        activeWorkspaceIds: Set<WorkspaceDescriptor.ID>
+        activeWorkspaceIds: Set<WorkspaceDescriptor.ID>,
+        nativeInactiveWindowIds: Set<Int> = []
     ) {
         inactiveWorkspaceWindowIds.removeAll(keepingCapacity: true)
         for (wsId, windowId) in allEntries {
@@ -85,6 +86,7 @@ final class AXManager {
                 inactiveWorkspaceWindowIds.insert(windowId)
             }
         }
+        inactiveWorkspaceWindowIds.formUnion(nativeInactiveWindowIds)
     }
 
     func markWindowActive(_ windowId: Int) {

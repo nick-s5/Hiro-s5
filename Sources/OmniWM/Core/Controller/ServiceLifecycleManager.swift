@@ -16,6 +16,8 @@ final class ServiceLifecycleManager {
     weak var controller: WMController?
 
     private var displayObserver: DisplayConfigurationObserver?
+    private var screenParametersObserver: NSObjectProtocol?
+    private var activeDisplayObserver: NSObjectProtocol?
     private var appActivationObserver: NSObjectProtocol?
     private var appDeactivationObserver: NSObjectProtocol?
     private var appHideObserver: NSObjectProtocol?
@@ -34,12 +36,12 @@ final class ServiceLifecycleManager {
         guard let controller else { return }
         let initialPermissionGranted = currentAccessibilityPermissionGranted()
         controller.updateAccessibilityPermissionGranted(initialPermissionGranted)
-        if controller.desiredEnabled,
-           initialPermissionGranted,
-           !controller.hasStartedServices
-        {
-            startServices()
-        }
+        setupSeparateSpacesObserver()
+        maybeStartServices()
+        startPermissionMonitoring()
+    }
+
+    private func startPermissionMonitoring() {
         permissionCheckerTask?.cancel()
         permissionCheckerTask = Task { @MainActor [weak self, weak controller] in
             guard let self else { return }
@@ -48,14 +50,40 @@ final class ServiceLifecycleManager {
 
                 if granted {
                     controller.updateAccessibilityPermissionGranted(true)
-                    if controller.desiredEnabled, !controller.hasStartedServices {
-                        self.startServices()
-                    }
+                    self.maybeStartServices()
                 } else {
                     _ = self.requestAccessibilityPermission()
                     controller.updateAccessibilityPermissionGranted(false)
                 }
             }
+        }
+    }
+
+    private func maybeStartServices() {
+        guard let controller else { return }
+        controller.updateDisplaySpacesMode(SkyLight.shared.displaysHaveSeparateSpaces)
+        if controller.displaySpacesMode == .disabled {
+            if controller.hasStartedServices {
+                stop()
+                startPermissionMonitoring()
+            }
+            return
+        }
+        guard !controller.hasStartedServices,
+              controller.desiredEnabled,
+              currentAccessibilityPermissionGranted()
+        else { return }
+        startServices()
+    }
+
+    private func setupSeparateSpacesObserver() {
+        guard screenParametersObserver == nil else { return }
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.maybeStartServices() }
         }
     }
 
@@ -238,6 +266,13 @@ final class ServiceLifecycleManager {
         ) { _ in
             EventIntake.post(.activeSpaceChanged)
         }
+        activeDisplayObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: Notification.Name("NSWorkspaceActiveDisplayDidChangeNotification"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            EventIntake.post(.activeSpaceChanged)
+        }
     }
 
     private func setupAppActivationObserver() {
@@ -358,6 +393,10 @@ final class ServiceLifecycleManager {
         if let observer = workspaceObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             workspaceObserver = nil
+        }
+        if let observer = activeDisplayObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            activeDisplayObserver = nil
         }
         if let observer = sleepObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)

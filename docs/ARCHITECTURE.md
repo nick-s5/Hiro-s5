@@ -182,7 +182,7 @@ The application starts in `Sources/OmniWMApp/OmniWMApp.swift`:
 1. Polls for accessibility permission (blocks until granted).
 2. Once trusted, `startServices()` connects all event plumbing:
    - `eventIntake.open(sink: eventInterpreter)` — opens the intake buffer and wires the drain sink.
-   - `spaceTracker.start()` — begins space-topology tracking (if `spacesTrackingEnabled`).
+   - `spaceTracker.start()` — begins space-topology tracking.
    - `AXEventHandler` setup — SkyLight/CGS event observation via `CGSEventObserver`.
    - `HotkeyCenter` — Carbon hotkey registration.
    - `MouseEventHandler` — CGEvent taps.
@@ -684,7 +684,11 @@ IPCClient ──── Unix socket ────► IPCConnection (actor, per cli
 
 **Directory:** `Sources/OmniWM/Core/Spaces/`
 
-`SpaceTopology` is a pure value model of the macOS Spaces layout: per-display space lists + current space, the global active space, the set of fullscreen-type spaces, and a window→space map, with read-only derivations (`isFullscreenSpace`, `isWindowOnFullscreenSpace`, …). `SpaceTracker` is a `@MainActor` **stateless transform**: gated by `settings.spacesTrackingEnabled` (default-on), it rebuilds a fresh `SpaceTopology` from read-only SkyLight queries (`CGSCopyManagedDisplaySpaces`, `CGSCopySpacesForWindows`) and commits it through `WorldStore` via the `.spaceTopologyChanged` event. The durable topology lives on `WorldStore` (`private(set) var spaceTopology`), not in the tracker.
+OmniWM **requires** the macOS "Displays have separate Spaces" setting to be ON (`SkyLight.displaysHaveSeparateSpaces`, backed by `SLSGetSpaceManagementMode`); when it is OFF the window-management runtime does not start (the app stays alive with a status-bar warning), and an `unavailable` reading fails open so a missing private symbol never bricks tiling.
+
+`SpaceTopology` is a pure value model of the macOS Spaces layout: per-display space lists + current space, the global active space (kept only as a frontmost-display hint), the set of fullscreen-type spaces, and a window→space map, with read-only derivations (`isCurrentSpace`, `isFullscreenSpace`, `isWindowOnKnownInactiveSpace`, `selectWindowSpace`, …). Because each display has its own active space, per-window space decisions use the **per-display current space** (`isCurrentSpace`) rather than the single global active space — e.g. `reconcileNativeFullscreenWithTopology` suspends a window whose fullscreen space is current **on its own display**. `SpaceTracker` is a `@MainActor` **stateless transform** that runs whenever services are active (it no longer gates the safety-critical refresh on `settings.spacesTrackingEnabled`): it rebuilds a fresh `SpaceTopology` from read-only SkyLight queries (`CGSCopyManagedDisplaySpaces`, `CGSCopySpacesForWindows`, selecting a window's desktop space via `SpaceTopology.selectWindowSpace`) and commits it through `WorldStore`. Refresh is driven by `activeSpaceDidChange` and `activeDisplayDidChange`. The durable topology lives on `WorldStore` (`private(set) var spaceTopology`), not in the tracker.
+
+**Native-inactive safety.** Windows on a known **inactive native Space** are left to macOS: they are frame-write-suppressed (even when their OmniWM workspace is active) and never physically parked off-screen, and a window created on an inactive native Space defers admission until its Space becomes current. The suppression self-heals — it clears on the next topology refresh once the Space is current, and no-ops when a window's Space is unknown.
 
 **Native fullscreen** is now derived from facts, not inferred from AX element lifecycle:
 

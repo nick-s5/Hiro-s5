@@ -41,4 +41,17 @@ struct SpaceTopology: Equatable, Sendable {
         guard let spaceId = windowSpace[windowId] else { return false }
         return isKnownSpace(spaceId) && !isCurrentSpace(spaceId)
     }
+
+    func selectWindowSpace(from candidates: [UInt64]) -> UInt64? {
+        if let currentDesktop = candidates.first(where: { isCurrentSpace($0) && !isFullscreenSpace($0) }) {
+            return currentDesktop
+        }
+        if let knownDesktop = candidates.first(where: { isKnownSpace($0) && !isFullscreenSpace($0) }) {
+            return knownDesktop
+        }
+        if let current = candidates.first(where: { isCurrentSpace($0) }) {
+            return current
+        }
+        return candidates.first { $0 != 0 }
+    }
 }

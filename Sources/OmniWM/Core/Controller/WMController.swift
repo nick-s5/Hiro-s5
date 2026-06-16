@@ -63,6 +63,8 @@ final class WMController {
     private(set) var accessibilityPermissionGranted = AccessibilityPermissionMonitor.shared.isGranted
     private(set) var focusFollowsMouseEnabled: Bool = false
     private(set) var moveMouseToFocusedWindowEnabled: Bool = false
+    private(set) var displaySpacesMode: DisplaySpacesMode = .enabled
+    private var displaySpacesAlertShown = false
 
     let settings: SettingsStore
     let workspaceManager: WorkspaceManager
@@ -367,6 +369,29 @@ final class WMController {
     func updateAccessibilityPermissionGranted(_ granted: Bool) {
         accessibilityPermissionGranted = granted
         reconcileEnabledAndHotkeysState()
+    }
+
+    func updateDisplaySpacesMode(_ mode: DisplaySpacesMode) {
+        guard displaySpacesMode != mode else { return }
+        displaySpacesMode = mode
+        statusBarController?.rebuildMenu()
+        if mode == .disabled, !displaySpacesAlertShown {
+            displaySpacesAlertShown = true
+            presentSeparateSpacesAlert()
+        }
+    }
+
+    private func presentSeparateSpacesAlert() {
+        Task { @MainActor in
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Enable “Displays have separate Spaces”"
+            alert.informativeText = "OmniWM requires the macOS setting “Displays have separate Spaces.” "
+                + "Turn it on in System Settings > Desktop & Dock > Mission Control, then log out and back in. "
+                + "Window management stays paused until it is enabled."
+            alert.addButton(withTitle: "OK")
+            _ = alert.runModal()
+        }
     }
 
     func reconcileEnabledAndHotkeysState() {

@@ -2113,8 +2113,26 @@ import QuartzCore
         }
         controller.axManager.updateInactiveWorkspaceWindows(
             allEntries: allEntries,
-            activeWorkspaceIds: activeWorkspaceIds
+            activeWorkspaceIds: activeWorkspaceIds,
+            nativeInactiveWindowIds: nativeInactiveWindowIds()
         )
+    }
+
+    private func nativeInactiveWindowIds() -> Set<Int> {
+        guard let controller else { return [] }
+        let topology = controller.workspaceManager.spaceTopology
+        guard topology.isPopulated else { return [] }
+        var result: Set<Int> = []
+        for entry in controller.workspaceManager.allEntries()
+            where topology.isWindowOnKnownInactiveSpace(entry.windowId)
+        {
+            result.insert(entry.windowId)
+        }
+        return result
+    }
+
+    private func isWindowOnKnownInactiveNativeSpace(_ windowId: Int) -> Bool {
+        controller?.workspaceManager.spaceTopology.isWindowOnKnownInactiveSpace(windowId) ?? false
     }
 
     func hasWorkspaceInactiveFloatingWindows(activeWorkspaceIds: Set<WorkspaceDescriptor.ID>) -> Bool {
@@ -2160,6 +2178,7 @@ import QuartzCore
         monitor: Monitor
     ) -> CGRect? {
         guard let controller else { return nil }
+        guard !isWindowOnKnownInactiveNativeSpace(entry.windowId) else { return nil }
         guard entry.mode == .floating,
               entry.layoutReason == .standard,
               controller.workspaceManager.hiddenState(for: entry.token)?.workspaceInactive == true
@@ -2186,7 +2205,8 @@ import QuartzCore
         }
         controller.axManager.updateInactiveWorkspaceWindows(
             allEntries: allEntries,
-            activeWorkspaceIds: activeWorkspaceIds
+            activeWorkspaceIds: activeWorkspaceIds,
+            nativeInactiveWindowIds: nativeInactiveWindowIds()
         )
 
         // Bulk cancel in-flight frame jobs for all inactive workspace windows upfront,
@@ -2219,6 +2239,9 @@ import QuartzCore
         guard let controller else { return }
         let entries = controller.workspaceManager.entries(in: workspaceId)
         for entry in entries {
+            if isWindowOnKnownInactiveNativeSpace(entry.windowId) {
+                continue
+            }
             controller.axManager.markWindowActive(entry.windowId)
             unhideWindow(entry, monitor: monitor)
         }
@@ -2236,6 +2259,9 @@ import QuartzCore
                 continue
             }
             controller.axManager.markWindowInactive(entry.windowId)
+            if isWindowOnKnownInactiveNativeSpace(entry.windowId) {
+                continue
+            }
             hideWindow(
                 entry,
                 monitor: monitor,
