@@ -28,11 +28,13 @@ extension ViewportState {
         }
 
         guard snapToColumn else {
-            endGesturePreservingCurrentOffset(
-                currentOffset: currentOffset,
+            endGestureWithMomentum(
+                projectedOffset: projectedOffset,
                 columns: columns,
                 gap: gap,
-                viewportWidth: viewportWidth
+                viewportWidth: viewportWidth,
+                totalColumnWidth: totalColumnWidth,
+                motion: motion
             )
             return
         }
@@ -335,31 +337,54 @@ extension ViewportState {
         snapPoints.append(SnapPoint(viewPos: viewPos, columnIndex: columnIndex))
     }
 
-    private mutating func endGesturePreservingCurrentOffset(
-        currentOffset: Double,
+    private mutating func endGestureWithMomentum(
+        projectedOffset: Double,
         columns: [NiriContainer],
         gap: CGFloat,
-        viewportWidth: CGFloat
+        viewportWidth: CGFloat,
+        totalColumnWidth: Double,
+        motion: MotionSnapshot
     ) {
-        var finalOffset = currentOffset
-        let totalColumnWidth = Double(totalWidth(columns: columns, gap: gap))
-        let viewportWidth = Double(viewportWidth)
+        let oldActiveX = columnX(at: activeColumnIndex, columns: columns, gap: gap)
 
-        if let preservedOffset = normalizedPreservedGestureOffset(
-            currentOffset: currentOffset,
+        guard let preserved = normalizedPreservedGestureOffset(
+            currentOffset: projectedOffset,
             columns: columns,
             gap: gap,
-            viewportWidth: viewportWidth,
+            viewportWidth: Double(viewportWidth),
             totalColumnWidth: totalColumnWidth
-        ) {
-            finalOffset = preservedOffset.finalOffset
-            if activeColumnIndex != preservedOffset.normalizedActiveColumn {
-                viewOffsetToRestore = nil
-            }
-            activeColumnIndex = preservedOffset.normalizedActiveColumn
+        ) else {
+            jumpOffset(to: CGFloat(projectedOffset))
+            activatePrevColumnOnRemoval = nil
+            selectionProgress = 0.0
+            return
         }
 
-        jumpOffset(to: CGFloat(finalOffset))
+        let newActiveX = columnX(at: preserved.normalizedActiveColumn, columns: columns, gap: gap)
+        let offsetDelta = oldActiveX - newActiveX
+
+        if activeColumnIndex != preserved.normalizedActiveColumn {
+            viewOffsetToRestore = nil
+        }
+        activeColumnIndex = preserved.normalizedActiveColumn
+
+        let maxViewStart = max(0, totalColumnWidth - Double(viewportWidth))
+        let overscrolled = Double(oldActiveX) + projectedOffset < 0
+            || Double(oldActiveX) + projectedOffset > maxViewStart
+
+        guard motion.animationsEnabled else {
+            jumpOffset(to: CGFloat(preserved.finalOffset))
+            activatePrevColumnOnRemoval = nil
+            selectionProgress = 0.0
+            return
+        }
+
+        rebaseOffset(by: offsetDelta)
+        if overscrolled {
+            springOffset(to: CGFloat(preserved.finalOffset))
+        } else {
+            decelerateOffset(to: CGFloat(preserved.finalOffset))
+        }
         activatePrevColumnOnRemoval = nil
         selectionProgress = 0.0
     }

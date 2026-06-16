@@ -5,6 +5,7 @@ struct OffsetTransition: Equatable {
     enum Kind: Equatable {
         case jump
         case spring(SpringConfig)
+        case deceleration
     }
 
     var rebaseDelta: CGFloat = 0
@@ -30,9 +31,12 @@ struct ViewportState: Equatable {
 }
 
 extension ViewportState {
-    var hasPendingSpringTransition: Bool {
-        if case .spring = offsetTransition.kind { return true }
-        return false
+    var hasPendingOffsetAnimation: Bool {
+        switch offsetTransition.kind {
+        case .spring,
+             .deceleration: true
+        default: false
+        }
     }
 
     mutating func rebaseOffset(by delta: CGFloat) {
@@ -49,6 +53,11 @@ extension ViewportState {
     mutating func springOffset(to offset: CGFloat, config: SpringConfig? = nil) {
         viewOffset = offset
         offsetTransition.kind = .spring(config ?? .niriHorizontalViewMovement)
+    }
+
+    mutating func decelerateOffset(to offset: CGFloat) {
+        viewOffset = offset
+        offsetTransition.kind = .deceleration
     }
 
     mutating func clearOffsetTransition() {

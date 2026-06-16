@@ -165,6 +165,17 @@ struct GeneralSettingsTab: View {
                 }
                 .disabled(!settings.scrollGestureEnabled)
 
+                Picker("Trackpad Scroll Style", selection: $settings.trackpadScrollStyle) {
+                    ForEach(TrackpadScrollStyle.allCases) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .disabled(!settings.scrollGestureEnabled)
+
+                SettingsCaption(settings.trackpadScrollStyle == .momentum
+                    ? "Free inertial scrolling with rubber-band edges"
+                    : "Scroll snaps to the nearest column")
+
                 Toggle("Invert Direction (Natural)", isOn: $settings.gestureInvertDirection)
                     .disabled(!settings.scrollGestureEnabled)
 

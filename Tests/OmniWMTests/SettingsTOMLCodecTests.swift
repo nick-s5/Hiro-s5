@@ -131,6 +131,24 @@ final class SettingsTOMLCodecTests: XCTestCase {
         XCTAssertEqual(rewritten, canonicalData)
     }
 
+    func testTrackpadScrollStyleRoundTrips() throws {
+        XCTAssertEqual(SettingsExport.defaults().trackpadScrollStyle, TrackpadScrollStyle.snap.rawValue)
+
+        var export = SettingsExport.defaults()
+        export.trackpadScrollStyle = TrackpadScrollStyle.momentum.rawValue
+        let data = try SettingsTOMLCodec.encode(export)
+
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("trackpadScrollStyle = \"momentum\""))
+        XCTAssertEqual(try SettingsTOMLCodec.decode(data).trackpadScrollStyle, TrackpadScrollStyle.momentum.rawValue)
+    }
+
+    func testTrackpadScrollStyleRecoversToSnapWhenMissing() throws {
+        let withoutKey = try defaultsWithReplacements(
+            ("trackpadScrollStyle = \"snap\"\n", "")
+        )
+        XCTAssertEqual(try SettingsTOMLCodec.decode(withoutKey).trackpadScrollStyle, TrackpadScrollStyle.snap.rawValue)
+    }
+
     private func defaultsWithReplacements(_ replacements: (String, String)...) throws -> Data {
         var toml = String(decoding: try SettingsTOMLCodec.encode(.defaults()), as: UTF8.self)
         for (target, replacement) in replacements {

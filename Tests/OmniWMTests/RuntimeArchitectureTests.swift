@@ -2223,7 +2223,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertEqual(state.selectedNodeId, secondNode.id)
         XCTAssertEqual(state.activeColumnIndex, 0)
         XCTAssertEqual(state.viewOffset, -16.0, accuracy: 0.001)
-        XCTAssertFalse(state.hasPendingSpringTransition)
+        XCTAssertFalse(state.hasPendingOffsetAnimation)
     }
 
     @MainActor
@@ -2586,7 +2586,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertFalse(plan.animationDirectives.containsStartNiriScroll(for: workspaceId))
         XCTAssertFalse(engine.hasAnyColumnAnimationsRunning(in: workspaceId))
         XCTAssertFalse(engine.hasAnyWindowAnimationsRunning(in: workspaceId))
-        XCTAssertFalse(patchedState.hasPendingSpringTransition)
+        XCTAssertFalse(patchedState.hasPendingOffsetAnimation)
         XCTAssertEqual(patchedViewOrigin, viewOrigin, accuracy: 0.001)
         XCTAssertEqual(patchedState.selectedNodeId, newNode.id)
     }
@@ -3530,7 +3530,7 @@ final class RuntimeArchitectureTests: XCTestCase {
         let patchedViewOrigin = patchedState.viewPosPixels(columns: finalColumns, gap: gap)
 
         XCTAssertEqual(patchedViewOrigin, viewOrigin, accuracy: 0.001, file: file, line: line)
-        XCTAssertFalse(patchedState.hasPendingSpringTransition, file: file, line: line)
+        XCTAssertFalse(patchedState.hasPendingOffsetAnimation, file: file, line: line)
         XCTAssertEqual(patchedState.selectedNodeId, newTabNode.id, file: file, line: line)
         XCTAssertEqual(
             finalColumns[position.targetColumnIndex].activeWindow?.token,

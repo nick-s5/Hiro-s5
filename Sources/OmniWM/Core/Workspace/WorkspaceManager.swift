@@ -301,7 +301,7 @@ final class WorkspaceManager {
             noteViewportInvalidationIfNeeded(
                 for: viewportWorkspaceId,
                 previousViewport: previousViewport,
-                pendingSpringTransition: viewportEventState(for: event)?.hasPendingSpringTransition == true
+                pendingOffsetAnimation: viewportEventState(for: event)?.hasPendingOffsetAnimation == true
             )
             if let eventState = viewportEventState(for: event) {
                 animationDriver.reconcileViewportCommit(
@@ -354,13 +354,13 @@ final class WorkspaceManager {
     private func noteViewportInvalidationIfNeeded(
         for workspaceId: WorkspaceDescriptor.ID,
         previousViewport: ViewportState?,
-        pendingSpringTransition: Bool
+        pendingOffsetAnimation: Bool
     ) {
         guard let nextViewport = world.viewports[workspaceId],
               niriViewportChangeRequiresInvalidation(
                   previous: previousViewport,
                   next: nextViewport,
-                  pendingSpringTransition: pendingSpringTransition
+                  pendingOffsetAnimation: pendingOffsetAnimation
               )
         else {
             return
@@ -2900,10 +2900,10 @@ final class WorkspaceManager {
     private func niriViewportChangeRequiresInvalidation(
         previous: ViewportState?,
         next: ViewportState,
-        pendingSpringTransition: Bool
+        pendingOffsetAnimation: Bool
     ) -> Bool {
         guard let previous else {
-            return next.selectedNodeId != nil || !pendingSpringTransition
+            return next.selectedNodeId != nil || !pendingOffsetAnimation
         }
         if previous.selectedNodeId != next.selectedNodeId {
             return true
@@ -3022,7 +3022,7 @@ final class WorkspaceManager {
         noteViewportInvalidationIfNeeded(
             for: workspaceId,
             previousViewport: previous,
-            pendingSpringTransition: state.hasPendingSpringTransition
+            pendingOffsetAnimation: state.hasPendingOffsetAnimation
         )
         animationDriver.reconcileViewportCommit(
             workspaceId: workspaceId,

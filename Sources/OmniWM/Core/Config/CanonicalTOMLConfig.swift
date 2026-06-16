@@ -146,6 +146,7 @@ struct CanonicalTOMLConfig: Codable, Equatable {
         var mouseResizeModifierKey: String
         var fingerCount: Int
         var invertDirection: Bool
+        var trackpadScrollStyle: String
     }
 
     struct StatusBar: Codable, Equatable {
@@ -705,6 +706,12 @@ extension CanonicalTOMLConfig.Gestures {
             default: defaults.invertDirection,
             recovering: recovering
         )
+        trackpadScrollStyle = try container.decode(
+            String.self,
+            forKey: .trackpadScrollStyle,
+            default: defaults.trackpadScrollStyle,
+            recovering: recovering
+        )
     }
 }
 
@@ -898,7 +905,8 @@ extension CanonicalTOMLConfig {
             scrollModifierKey: export.scrollModifierKey,
             mouseResizeModifierKey: export.mouseResizeModifierKey,
             fingerCount: export.gestureFingerCount,
-            invertDirection: export.gestureInvertDirection
+            invertDirection: export.gestureInvertDirection,
+            trackpadScrollStyle: export.trackpadScrollStyle
         )
         statusBar = StatusBar(
             showWorkspaceName: export.statusBarShowWorkspaceName,
@@ -1000,6 +1008,7 @@ extension CanonicalTOMLConfig {
             mouseResizeModifierKey: gestures.mouseResizeModifierKey,
             gestureFingerCount: gestures.fingerCount,
             gestureInvertDirection: gestures.invertDirection,
+            trackpadScrollStyle: gestures.trackpadScrollStyle,
             statusBarShowWorkspaceName: statusBar.showWorkspaceName,
             statusBarShowAppNames: statusBar.showAppNames,
             statusBarUseWorkspaceId: statusBar.useWorkspaceId,

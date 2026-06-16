@@ -33,6 +33,7 @@ final class AnimationDriver {
     enum ViewportMotion {
         case gesture(ViewportGesture)
         case spring(SpringAnimation)
+        case deceleration(DecelerationAnimation)
     }
 
     struct GestureEndSample {
@@ -66,6 +67,8 @@ final class AnimationDriver {
             semanticOffset + CGFloat(gesture.relativeOffset)
         case let .spring(animation):
             CGFloat(animation.value(at: time))
+        case let .deceleration(animation):
+            CGFloat(animation.value(at: time))
         case nil:
             nil
         }
@@ -79,7 +82,8 @@ final class AnimationDriver {
     ) -> CGFloat {
         let transition = localState.offsetTransition
         switch transition.kind {
-        case .spring:
+        case .spring,
+             .deceleration:
             let base = liveViewOffset(in: workspaceId, semanticOffset: storeOffset, at: time) ?? storeOffset
             return base + transition.rebaseDelta
         case .jump:
@@ -90,6 +94,8 @@ final class AnimationDriver {
                 return liveViewOffset(in: workspaceId, semanticOffset: localState.viewOffset, at: time)
                     ?? localState.viewOffset
             case let .spring(animation):
+                return CGFloat(animation.value(at: time)) + transition.rebaseDelta
+            case let .deceleration(animation):
                 return CGFloat(animation.value(at: time)) + transition.rebaseDelta
             case nil:
                 return localState.viewOffset
@@ -134,9 +140,25 @@ final class AnimationDriver {
         transition: OffsetTransition
     ) {
         let rebaseDelta = Double(transition.rebaseDelta)
-        if rebaseDelta != 0, case let .spring(animation) = motions[workspaceId] {
-            animation.offsetBy(rebaseDelta)
+        if rebaseDelta != 0 {
+            switch motions[workspaceId] {
+            case let .spring(animation):
+                animation.offsetBy(rebaseDelta)
+            case let .deceleration(animation):
+                animation.offsetBy(rebaseDelta)
+            default:
+                break
+            }
         }
+
+        let time = CACurrentMediaTime()
+        let origin = gestureCommitOrigin(
+            workspaceId: workspaceId,
+            previous: previous,
+            next: next,
+            rebaseDelta: rebaseDelta,
+            at: time
+        )
 
         switch transition.kind {
         case nil:
@@ -146,30 +168,44 @@ final class AnimationDriver {
             motions.removeValue(forKey: workspaceId)
 
         case let .spring(config):
-            let time = CACurrentMediaTime()
-            let from: Double
-            let velocity: Double
-            switch motions[workspaceId] {
-            case let .gesture(gesture):
-                from = Double(previous?.viewOffset ?? next.viewOffset) + rebaseDelta + gesture.relativeOffset
-                velocity = gesture.velocity
-            case let .spring(animation):
-                from = animation.value(at: time)
-                velocity = animation.velocity(at: time)
-            case nil:
-                from = Double(previous?.viewOffset ?? next.viewOffset) + rebaseDelta
-                velocity = 0
-            }
             motions[workspaceId] = .spring(
                 SpringAnimation(
-                    from: from,
+                    from: origin.from,
                     to: Double(next.viewOffset),
-                    initialVelocity: velocity,
+                    initialVelocity: origin.velocity,
                     startTime: time,
                     config: config,
                     displayRefreshRate: next.displayRefreshRate
                 )
             )
+
+        case .deceleration:
+            motions[workspaceId] = .deceleration(
+                DecelerationAnimation(
+                    from: origin.from,
+                    velocity: origin.velocity,
+                    startTime: time
+                )
+            )
+        }
+    }
+
+    private func gestureCommitOrigin(
+        workspaceId: WorkspaceDescriptor.ID,
+        previous: ViewportState?,
+        next: ViewportState,
+        rebaseDelta: Double,
+        at time: TimeInterval
+    ) -> (from: Double, velocity: Double) {
+        switch motions[workspaceId] {
+        case let .gesture(gesture):
+            (Double(previous?.viewOffset ?? next.viewOffset) + rebaseDelta + gesture.relativeOffset, gesture.velocity)
+        case let .spring(animation):
+            (animation.value(at: time), animation.velocity(at: time))
+        case let .deceleration(animation):
+            (animation.value(at: time), animation.velocity(at: time))
+        case nil:
+            (Double(previous?.viewOffset ?? next.viewOffset) + rebaseDelta, 0)
         }
     }
 
@@ -178,6 +214,12 @@ final class AnimationDriver {
         case .gesture:
             return true
         case let .spring(animation):
+            if animation.isComplete(at: time) {
+                motions.removeValue(forKey: workspaceId)
+                return false
+            }
+            return true
+        case let .deceleration(animation):
             if animation.isComplete(at: time) {
                 motions.removeValue(forKey: workspaceId)
                 return false

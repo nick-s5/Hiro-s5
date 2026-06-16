@@ -37,16 +37,16 @@ final class AnimationDriverTests: XCTestCase {
 
         state.springOffset(to: 100)
         XCTAssertEqual(state.viewOffset, 100)
-        XCTAssertTrue(state.hasPendingSpringTransition)
+        XCTAssertTrue(state.hasPendingOffsetAnimation)
 
         state.rebaseOffset(by: -3)
         XCTAssertEqual(state.viewOffset, 97)
         XCTAssertEqual(state.offsetTransition.rebaseDelta, 2)
-        XCTAssertTrue(state.hasPendingSpringTransition)
+        XCTAssertTrue(state.hasPendingOffsetAnimation)
 
         state.jumpOffset(to: 40)
         XCTAssertEqual(state.offsetTransition.kind, .jump)
-        XCTAssertFalse(state.hasPendingSpringTransition)
+        XCTAssertFalse(state.hasPendingOffsetAnimation)
 
         state.clearOffsetTransition()
         XCTAssertEqual(state.offsetTransition, OffsetTransition())

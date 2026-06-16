@@ -314,6 +314,12 @@ final class SettingsStore {
         didSet { scheduleSave() }
     }
 
+    var trackpadScrollStyle = TrackpadScrollStyle(
+        rawValue: SettingsStore.defaultExport.trackpadScrollStyle
+    ) ?? .snap {
+        didSet { scheduleSave() }
+    }
+
     var statusBarShowWorkspaceName = SettingsStore.defaultExport.statusBarShowWorkspaceName {
         didSet { scheduleSave() }
     }
@@ -563,6 +569,7 @@ final class SettingsStore {
             mouseResizeModifierKey: mouseResizeModifierKey.rawValue,
             gestureFingerCount: gestureFingerCount.rawValue,
             gestureInvertDirection: gestureInvertDirection,
+            trackpadScrollStyle: trackpadScrollStyle.rawValue,
             statusBarShowWorkspaceName: statusBarShowWorkspaceName,
             statusBarShowAppNames: statusBarShowAppNames,
             statusBarUseWorkspaceId: statusBarUseWorkspaceId,
@@ -676,6 +683,7 @@ final class SettingsStore {
         mouseResizeModifierKey = MouseResizeModifierKey(rawValue: export.mouseResizeModifierKey) ?? .option
         gestureFingerCount = GestureFingerCount(rawValue: export.gestureFingerCount) ?? .three
         gestureInvertDirection = export.gestureInvertDirection
+        trackpadScrollStyle = TrackpadScrollStyle(rawValue: export.trackpadScrollStyle) ?? .snap
         statusBarShowWorkspaceName = export.statusBarShowWorkspaceName
         statusBarShowAppNames = export.statusBarShowAppNames
         statusBarUseWorkspaceId = export.statusBarUseWorkspaceId

@@ -100,6 +100,7 @@ final class MouseEventHandler {
         var gestureLastAverageX: CGFloat = 0.0
         var gestureLastAverageY: CGFloat = 0.0
         var lockedGestureContext: LockedGestureContext?
+        var suppressTrackpadMomentumScroll = false
         var horizontalWheelTracker = NiriScrollTracker(tick: niriWheelScrollTickAmount)
         var verticalWheelTracker = NiriScrollTracker(tick: niriWheelScrollTickAmount)
     }
@@ -349,11 +350,17 @@ final class MouseEventHandler {
         momentumPhase: UInt32,
         phase: UInt32,
         modifiers: CGEventFlags
-    ) {
+    ) -> Bool {
         guard !isInputSuppressed else {
             handleInputSuppressionBegan()
-            return
+            return false
         }
+        let suppress = shouldSuppressScroll(
+            at: location,
+            momentumPhase: momentumPhase,
+            phase: phase,
+            modifiers: modifiers
+        )
         EventIntake.post(
             .mouseScroll(
                 MouseScrollIntake(
@@ -366,6 +373,35 @@ final class MouseEventHandler {
                 )
             )
         )
+        return suppress
+    }
+
+    private func shouldSuppressScroll(
+        at location: CGPoint,
+        momentumPhase: UInt32,
+        phase: UInt32,
+        modifiers: CGEventFlags
+    ) -> Bool {
+        guard let controller, controller.isEnabled, controller.settings.scrollGestureEnabled else {
+            return false
+        }
+        if controller.isOverviewOpen() { return false }
+        if shouldBlockOwnWindowInput(at: location) { return false }
+        guard !state.isResizing, !state.isMoving else { return false }
+
+        let isTrackpad = momentumPhase != 0 || phase != 0
+        if isTrackpad {
+            if isViewportGestureActive { return true }
+            if state.suppressTrackpadMomentumScroll {
+                if momentumPhase != 0 { return true }
+                state.suppressTrackpadMomentumScroll = false
+            }
+            return false
+        }
+
+        let requiredModifiers = controller.settings.scrollModifierKey.cgEventFlag
+        guard Self.mouseWheelModifiersMatch(modifiers, required: requiredModifiers) else { return false }
+        return resolveScrollContext(at: location) != nil
     }
 
     func receiveTapGestureEvent(from cgEvent: CGEvent) {
@@ -1160,7 +1196,7 @@ final class MouseEventHandler {
                 )
                 didApply = true
             }
-            shouldStartAnimation = vstate.hasPendingSpringTransition
+            shouldStartAnimation = vstate.hasPendingOffsetAnimation
         }
 
         if didApply {
@@ -1207,7 +1243,7 @@ final class MouseEventHandler {
                 gap: gap,
                 viewportWidth: insetFrame.width,
                 motion: controller.motionPolicy.snapshot(),
-                snapToColumn: true,
+                snapToColumn: controller.settings.trackpadScrollStyle == .snap,
                 centerMode: engine.centerFocusedColumn,
                 alwaysCenterSingleColumn: engine.alwaysCenterSingleColumn,
                 workingArea: insetFrame,
@@ -1241,6 +1277,7 @@ final class MouseEventHandler {
             timestamp: timestamp
         )
         resetGestureState()
+        state.suppressTrackpadMomentumScroll = true
     }
 
     private func cancelCommittedGestureViewportState(for wsId: WorkspaceDescriptor.ID) {
@@ -1421,7 +1458,7 @@ final class MouseEventHandler {
                 handler.receiveTapMouseUp(at: screenLocation, button: .right)
             case .scrollWheel:
                 guard let scrollPayload else { return }
-                handler.receiveTapScrollWheel(
+                suppressEvent = handler.receiveTapScrollWheel(
                     at: screenLocation,
                     deltaX: scrollPayload.deltaX,
                     deltaY: scrollPayload.deltaY,

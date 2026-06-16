@@ -8,7 +8,7 @@ import QuartzCore
     engine: NiriLayoutEngine,
     workspaceId: WorkspaceDescriptor.ID
 ) -> Bool {
-    state.hasPendingSpringTransition
+    state.hasPendingOffsetAnimation
         || driver.hasMotion(in: workspaceId)
         || engine.hasAnyWindowAnimationsRunning(in: workspaceId)
         || engine.hasAnyColumnAnimationsRunning(in: workspaceId)
@@ -636,7 +636,7 @@ enum NiriWindowMoveResult {
                 gaps: pass.gap,
                 fromContainerIndex: removal.removalResult.fromIndexForVisibility
             )
-            let liveOffsetDelta = state.hasPendingSpringTransition
+            let liveOffsetDelta = state.hasPendingOffsetAnimation
                 ? state.offsetTransition.rebaseDelta - rebaseDeltaBefore
                 : state.viewOffset - offsetBefore
             if abs(liveOffsetDelta) > 1 {
@@ -1608,14 +1608,14 @@ enum NiriWindowMoveResult {
                     controller?.focusWindow(focusToken, origin: options.focusOrigin)
                 }
             }
-            if options.startAnimation, state.hasPendingSpringTransition {
+            if options.startAnimation, state.hasPendingOffsetAnimation {
                 controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
             }
         } else {
             if options.axFocus, let windowNode = node as? NiriWindow {
                 controller.focusWindow(windowNode.token, origin: options.focusOrigin)
             }
-            if options.startAnimation, state.hasPendingSpringTransition {
+            if options.startAnimation, state.hasPendingOffsetAnimation {
                 controller.layoutRefreshController.startScrollAnimation(for: workspaceId)
             }
         }
