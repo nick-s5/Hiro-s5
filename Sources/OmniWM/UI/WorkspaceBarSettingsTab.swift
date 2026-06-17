@@ -117,7 +117,6 @@ private struct GlobalBarSettingsSection: View {
                 SettingsNumberStepperRow(
                     label: "X Offset",
                     value: $settings.workspaceBarXOffset,
-                    range: -500 ... 500,
                     step: 10,
                     valueText: "\(Int(settings.workspaceBarXOffset)) px"
                 )
@@ -129,7 +128,6 @@ private struct GlobalBarSettingsSection: View {
                 SettingsNumberStepperRow(
                     label: "Y Offset",
                     value: $settings.workspaceBarYOffset,
-                    range: -500 ... 500,
                     step: 10,
                     valueText: "\(Int(settings.workspaceBarYOffset)) px"
                 )
@@ -356,7 +354,6 @@ private struct MonitorBarSettingsSection: View {
                 label: "X Offset",
                 value: ms.xOffset,
                 globalValue: settings.workspaceBarXOffset,
-                range: -500 ... 500,
                 step: 10,
                 formatter: { "\(Int($0)) px" },
                 onChange: { newValue in updateSetting { $0.xOffset = newValue } },
@@ -368,7 +365,6 @@ private struct MonitorBarSettingsSection: View {
                 label: "Y Offset",
                 value: ms.yOffset,
                 globalValue: settings.workspaceBarYOffset,
-                range: -500 ... 500,
                 step: 10,
                 formatter: { "\(Int($0)) px" },
                 onChange: { newValue in updateSetting { $0.yOffset = newValue } },

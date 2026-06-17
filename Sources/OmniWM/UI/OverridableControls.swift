@@ -80,21 +80,20 @@ struct SettingsSliderRow: View {
 struct SettingsNumberStepperRow: View {
     let label: String
     @Binding var value: Double
-    let range: ClosedRange<Double>
     let step: Double
     let valueText: String
 
     var body: some View {
         LabeledContent(label) {
             HStack(spacing: 8) {
-                Stepper(value: $value, in: range, step: step) {
+                Stepper(value: $value, step: step) {
                     EmptyView()
                 }
                 .labelsHidden()
                 .accessibilityLabel(label)
                 .accessibilityValue(valueText)
 
-                TextField(label, value: boundedValue, format: .number)
+                TextField(label, value: $value, format: .number)
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 64)
@@ -104,13 +103,6 @@ struct SettingsNumberStepperRow: View {
                 SettingsValueText(text: valueText, width: 60)
             }
         }
-    }
-
-    private var boundedValue: Binding<Double> {
-        Binding(
-            get: { value },
-            set: { value = min(max($0, range.lowerBound), range.upperBound) }
-        )
     }
 }
 
@@ -327,7 +319,6 @@ struct OverridableStepper: View {
     let label: String
     let value: Double?
     let globalValue: Double
-    let range: ClosedRange<Double>
     let step: Double
     let formatter: (Double) -> String
     let onChange: (Double) -> Void
@@ -341,21 +332,25 @@ struct OverridableStepper: View {
         value != nil
     }
 
+    private var binding: Binding<Double> {
+        Binding(
+            get: { effectiveValue },
+            set: { onChange($0) }
+        )
+    }
+
     var body: some View {
         LabeledContent(label) {
             HStack {
                 let displayValue = formatter(effectiveValue)
-                Stepper(value: Binding(
-                    get: { effectiveValue },
-                    set: { onChange(min(max($0, range.lowerBound), range.upperBound)) }
-                ), in: range, step: step) {
+                Stepper(value: binding, step: step) {
                     EmptyView()
                 }
                 .labelsHidden()
                 .accessibilityLabel(label)
                 .accessibilityValue(displayValue)
 
-                TextField(label, value: boundedValue, format: .number)
+                TextField(label, value: binding, format: .number)
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 64)
@@ -366,13 +361,6 @@ struct OverridableStepper: View {
                 overrideStatus
             }
         }
-    }
-
-    private var boundedValue: Binding<Double> {
-        Binding(
-            get: { effectiveValue },
-            set: { onChange(min(max($0, range.lowerBound), range.upperBound)) }
-        )
     }
 
     @ViewBuilder
