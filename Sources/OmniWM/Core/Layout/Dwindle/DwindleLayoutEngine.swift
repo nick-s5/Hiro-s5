@@ -47,9 +47,7 @@ final class DwindleLayoutEngine {
         effective.smartSplit = resolved.smartSplit
         effective.defaultSplitRatio = resolved.defaultSplitRatio
         effective.splitWidthMultiplier = resolved.splitWidthMultiplier
-        if !resolved.singleWindowAspectRatio.isFillScreen {
-            effective.singleWindowAspectRatio = resolved.singleWindowAspectRatio.size
-        }
+        effective.singleWindowFit = resolved.singleWindowFit
         if !resolved.useGlobalGaps {
             effective.innerGap = resolved.innerGap
         }
@@ -697,28 +695,7 @@ final class DwindleLayoutEngine {
     }
 
     private func singleWindowRect(screen: CGRect) -> CGRect {
-        let targetRatio = settings.singleWindowAspectRatio.width / settings.singleWindowAspectRatio.height
-        let currentRatio = screen.width / screen.height
-
-        if abs(targetRatio - currentRatio) < settings.singleWindowAspectRatioTolerance {
-            return screen
-        }
-
-        var width = screen.width
-        var height = screen.height
-
-        if currentRatio > targetRatio {
-            width = height * targetRatio
-        } else {
-            height = width / targetRatio
-        }
-
-        return CGRect(
-            x: screen.minX + (screen.width - width) / 2,
-            y: screen.minY + (screen.height - height) / 2,
-            width: width,
-            height: height
-        )
+        settings.singleWindowFit.frame(in: screen)
     }
 
     func findGeometricNeighbor(

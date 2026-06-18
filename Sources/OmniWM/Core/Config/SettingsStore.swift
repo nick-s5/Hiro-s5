@@ -102,9 +102,9 @@ final class SettingsStore {
         didSet { scheduleSave() }
     }
 
-    var niriSingleWindowAspectRatio = SingleWindowAspectRatio(
-        rawValue: SettingsStore.defaultExport.niriSingleWindowAspectRatio
-    ) ?? .none {
+    var niriSingleWindowFit = SingleWindowFit(
+        serialized: SettingsStore.defaultExport.niriSingleWindowAspectRatio
+    ) {
         didSet { scheduleSave() }
     }
 
@@ -246,9 +246,9 @@ final class SettingsStore {
         didSet { scheduleSave() }
     }
 
-    var dwindleSingleWindowAspectRatio = DwindleSingleWindowAspectRatio(
-        rawValue: SettingsStore.defaultExport.dwindleSingleWindowAspectRatio
-    ) ?? .ratio4x3 {
+    var dwindleSingleWindowFit = SingleWindowFit(
+        serialized: SettingsStore.defaultExport.dwindleSingleWindowAspectRatio
+    ) {
         didSet { scheduleSave() }
     }
 
@@ -522,7 +522,7 @@ final class SettingsStore {
             niriInfiniteLoop: niriInfiniteLoop,
             niriCenterFocusedColumn: niriCenterFocusedColumn.rawValue,
             niriAlwaysCenterSingleColumn: niriAlwaysCenterSingleColumn,
-            niriSingleWindowAspectRatio: niriSingleWindowAspectRatio.rawValue,
+            niriSingleWindowAspectRatio: niriSingleWindowFit.serialized,
             niriColumnWidthPresets: niriColumnWidthPresets,
             niriDefaultColumnWidth: niriDefaultColumnWidth,
             workspaceConfigurations: workspaceConfigurations,
@@ -559,7 +559,7 @@ final class SettingsStore {
             dwindleSmartSplit: dwindleSmartSplit,
             dwindleDefaultSplitRatio: dwindleDefaultSplitRatio,
             dwindleSplitWidthMultiplier: dwindleSplitWidthMultiplier,
-            dwindleSingleWindowAspectRatio: dwindleSingleWindowAspectRatio.rawValue,
+            dwindleSingleWindowAspectRatio: dwindleSingleWindowFit.serialized,
             dwindleUseGlobalGaps: dwindleUseGlobalGaps,
             dwindleMoveToRootStable: dwindleMoveToRootStable,
             monitorDwindleSettings: monitorDwindleSettings,
@@ -618,7 +618,7 @@ final class SettingsStore {
         niriInfiniteLoop = export.niriInfiniteLoop
         niriCenterFocusedColumn = CenterFocusedColumn(rawValue: export.niriCenterFocusedColumn) ?? .never
         niriAlwaysCenterSingleColumn = export.niriAlwaysCenterSingleColumn
-        niriSingleWindowAspectRatio = SingleWindowAspectRatio(rawValue: export.niriSingleWindowAspectRatio) ?? .none
+        niriSingleWindowFit = SingleWindowFit(serialized: export.niriSingleWindowAspectRatio)
         niriColumnWidthPresets = SettingsStore.validatedPresets(
             export.niriColumnWidthPresets ?? baseline.niriColumnWidthPresets ?? SettingsStore.defaultColumnWidthPresets
         )
@@ -668,9 +668,7 @@ final class SettingsStore {
         dwindleSmartSplit = export.dwindleSmartSplit
         dwindleDefaultSplitRatio = export.dwindleDefaultSplitRatio
         dwindleSplitWidthMultiplier = export.dwindleSplitWidthMultiplier
-        dwindleSingleWindowAspectRatio = DwindleSingleWindowAspectRatio(
-            rawValue: export.dwindleSingleWindowAspectRatio
-        ) ?? .ratio4x3
+        dwindleSingleWindowFit = SingleWindowFit(serialized: export.dwindleSingleWindowAspectRatio)
         dwindleUseGlobalGaps = export.dwindleUseGlobalGaps
         dwindleMoveToRootStable = export.dwindleMoveToRootStable
         monitorDwindleSettings = SettingsStore.reboundMonitorSettings(
@@ -1021,7 +1019,7 @@ final class SettingsStore {
             maxVisibleColumns: override?.maxVisibleColumns ?? niriMaxVisibleColumns,
             centerFocusedColumn: override?.centerFocusedColumn ?? niriCenterFocusedColumn,
             alwaysCenterSingleColumn: override?.alwaysCenterSingleColumn ?? niriAlwaysCenterSingleColumn,
-            singleWindowAspectRatio: override?.singleWindowAspectRatio ?? niriSingleWindowAspectRatio,
+            singleWindowFit: override?.singleWindowFit ?? niriSingleWindowFit,
             infiniteLoop: override?.infiniteLoop ?? niriInfiniteLoop
         )
     }
@@ -1060,7 +1058,7 @@ final class SettingsStore {
             smartSplit: override?.smartSplit ?? dwindleSmartSplit,
             defaultSplitRatio: CGFloat(override?.defaultSplitRatio ?? dwindleDefaultSplitRatio),
             splitWidthMultiplier: CGFloat(override?.splitWidthMultiplier ?? dwindleSplitWidthMultiplier),
-            singleWindowAspectRatio: override?.singleWindowAspectRatio ?? dwindleSingleWindowAspectRatio,
+            singleWindowFit: override?.singleWindowFit ?? dwindleSingleWindowFit,
             useGlobalGaps: useGlobalGaps,
             innerGap: useGlobalGaps ? CGFloat(gapSize) : CGFloat(override?.innerGap ?? gapSize)
         )

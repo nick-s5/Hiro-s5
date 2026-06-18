@@ -280,7 +280,7 @@ import QuartzCore
         smartSplit: Bool? = nil,
         defaultSplitRatio: CGFloat? = nil,
         splitWidthMultiplier: CGFloat? = nil,
-        singleWindowAspectRatio: CGSize? = nil,
+        singleWindowFit: SingleWindowFit? = nil,
         innerGap: CGFloat? = nil
     ) {
         guard let controller, let engine = controller.dwindleEngine else { return }
@@ -288,7 +288,7 @@ import QuartzCore
             if let v = smartSplit { engine.settings.smartSplit = v }
             if let v = defaultSplitRatio { engine.settings.defaultSplitRatio = v }
             if let v = splitWidthMultiplier { engine.settings.splitWidthMultiplier = v }
-            if let v = singleWindowAspectRatio { engine.settings.singleWindowAspectRatio = v }
+            if let v = singleWindowFit { engine.settings.singleWindowFit = v }
             if let v = innerGap { engine.settings.innerGap = v }
         }
         controller.layoutRefreshController.requestRelayout(reason: .layoutConfigChanged)
@@ -506,7 +506,7 @@ import QuartzCore
         engine.settings.smartSplit = settings.smartSplit
         engine.settings.defaultSplitRatio = settings.defaultSplitRatio
         engine.settings.splitWidthMultiplier = settings.splitWidthMultiplier
-        engine.settings.singleWindowAspectRatio = settings.singleWindowAspectRatio.size
+        engine.settings.singleWindowFit = settings.singleWindowFit
         engine.settings.innerGap = settings.innerGap
     }
 }

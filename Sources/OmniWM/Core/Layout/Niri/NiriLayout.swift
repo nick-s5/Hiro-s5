@@ -567,40 +567,6 @@ extension NiriLayoutEngine {
         }
     }
 
-    func aspectFittedSingleWindowRect(
-        in workingFrame: CGRect,
-        aspectRatio: CGFloat,
-        scale: CGFloat
-    ) -> CGRect {
-        guard aspectRatio > 0,
-              workingFrame.width > 0,
-              workingFrame.height > 0
-        else {
-            return workingFrame.roundedToPhysicalPixels(scale: scale)
-        }
-
-        let currentRatio = workingFrame.width / workingFrame.height
-        if abs(currentRatio - aspectRatio) < 0.001 {
-            return workingFrame.roundedToPhysicalPixels(scale: scale)
-        }
-
-        var width = workingFrame.width
-        var height = workingFrame.height
-
-        if currentRatio > aspectRatio {
-            width = height * aspectRatio
-        } else {
-            height = width / aspectRatio
-        }
-
-        return CGRect(
-            x: workingFrame.minX + (workingFrame.width - width) / 2,
-            y: workingFrame.minY + (workingFrame.height - height) / 2,
-            width: width,
-            height: height
-        ).roundedToPhysicalPixels(scale: scale)
-    }
-
     private func centeredSingleWindowRect(
         in workingFrame: CGRect,
         width: CGFloat,
@@ -621,11 +587,7 @@ extension NiriLayoutEngine {
         gaps: CGFloat
     ) -> CGRect {
         guard context.container.hasManualSingleWindowWidthOverride else {
-            return aspectFittedSingleWindowRect(
-                in: workingFrame,
-                aspectRatio: context.aspectRatio,
-                scale: scale
-            )
+            return context.fit.frame(in: workingFrame).roundedToPhysicalPixels(scale: scale)
         }
 
         if context.container.cachedWidth <= 0 {
@@ -637,7 +599,7 @@ extension NiriLayoutEngine {
             return workingFrame.roundedToPhysicalPixels(scale: scale)
         }
 
-        // Manual lone-window width commands bypass ratio mode but remain centered.
+        // Manual lone-window width commands bypass the configured fit but remain centered.
         return centeredSingleWindowRect(
             in: workingFrame,
             width: resolvedWidth,

@@ -606,9 +606,9 @@ enum NiriWindowMoveResult {
             }
         }
 
-        let usesSingleWindowAspectRatio = pass.engine.singleWindowLayoutContext(in: pass.wsId) != nil
-        if usesSingleWindowAspectRatio {
-            resetViewportForSingleWindowAspectRatio(state: &state)
+        let usesSingleWindowFit = pass.engine.singleWindowLayoutContext(in: pass.wsId) != nil
+        if usesSingleWindowFit {
+            resetViewportForSingleWindowFit(state: &state)
         }
 
         let offsetBefore = state.viewOffset
@@ -619,7 +619,7 @@ enum NiriWindowMoveResult {
 
         resolveColumnWidthsIfNeeded(pass: pass)
 
-        if !usesSingleWindowAspectRatio,
+        if !usesSingleWindowFit,
            !isGestureOrAnimation,
            snapshot.isActiveWorkspace,
            let selectedId = state.selectedNodeId,
@@ -681,7 +681,7 @@ enum NiriWindowMoveResult {
 
             if wasEmpty {
                 if pass.engine.singleWindowLayoutContext(in: pass.wsId) != nil {
-                    resetViewportForSingleWindowAspectRatio(state: &state)
+                    resetViewportForSingleWindowFit(state: &state)
                 } else {
                     let cols = pass.engine.columns(in: pass.wsId)
                     let settings = pass.engine.effectiveSettings(in: pass.wsId)
@@ -821,7 +821,7 @@ enum NiriWindowMoveResult {
         state.jumpOffset(to: viewOrigin - activeColumnX)
     }
 
-    private func resetViewportForSingleWindowAspectRatio(state: inout ViewportState) {
+    private func resetViewportForSingleWindowFit(state: inout ViewportState) {
         state.activeColumnIndex = 0
         state.jumpOffset(to: 0)
         state.activatePrevColumnOnRemoval = nil
@@ -1531,7 +1531,7 @@ enum NiriWindowMoveResult {
         infiniteLoop: Bool? = nil,
         centerFocusedColumn: CenterFocusedColumn? = nil,
         alwaysCenterSingleColumn: Bool? = nil,
-        singleWindowAspectRatio: SingleWindowAspectRatio? = nil,
+        singleWindowFit: SingleWindowFit? = nil,
         columnWidthPresets: [Double]? = nil,
         defaultColumnWidth: Double?? = nil
     ) {
@@ -1542,7 +1542,7 @@ enum NiriWindowMoveResult {
                 infiniteLoop: infiniteLoop,
                 centerFocusedColumn: centerFocusedColumn,
                 alwaysCenterSingleColumn: alwaysCenterSingleColumn,
-                singleWindowAspectRatio: singleWindowAspectRatio,
+                singleWindowFit: singleWindowFit,
                 presetColumnWidths: columnWidthPresets?.map { .proportion($0) },
                 defaultColumnWidth: defaultColumnWidth.map { $0.map { CGFloat($0) } }
             )

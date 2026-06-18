@@ -82,14 +82,18 @@ private struct GlobalDwindleSettingsSection: View {
             }
             SettingsCaption("Affects when to prefer vertical vs horizontal splits")
 
-            Picker("Single Window Ratio", selection: $settings.dwindleSingleWindowAspectRatio) {
-                ForEach(DwindleSingleWindowAspectRatio.allCases, id: \.self) { ratio in
-                    Text(ratio.displayName).tag(ratio)
+            SingleWindowFitControls(
+                label: "Single Window",
+                fit: settings.dwindleSingleWindowFit,
+                modes: SingleWindowFit.dwindleModes,
+                onChange: { newValue in
+                    settings.dwindleSingleWindowFit = newValue
+                    controller.updateDwindleConfig(singleWindowFit: newValue)
                 }
-            }
-            .onChange(of: settings.dwindleSingleWindowAspectRatio) { _, newValue in
-                controller.updateDwindleConfig(singleWindowAspectRatio: newValue.size)
-            }
+            )
+            SettingsCaption(
+                "How a lone window is sized: Full Screen fills the work area; Custom uses a fixed width × height"
+            )
 
             Toggle("Use Global Gap Settings", isOn: $settings.dwindleUseGlobalGaps)
                 .onChange(of: settings.dwindleUseGlobalGaps) { _, _ in
@@ -159,14 +163,13 @@ private struct MonitorDwindleSettingsSection: View {
             )
             SettingsCaption("Affects when to prefer vertical vs horizontal splits")
 
-            OverridablePicker(
-                label: "Single Window Ratio",
-                value: ms.singleWindowAspectRatio,
-                globalValue: settings.dwindleSingleWindowAspectRatio,
-                options: DwindleSingleWindowAspectRatio.allCases,
-                displayName: { $0.displayName },
-                onChange: { newValue in updateSetting { $0.singleWindowAspectRatio = newValue } },
-                onReset: { updateSetting { $0.singleWindowAspectRatio = nil } }
+            SingleWindowFitControls(
+                label: "Single Window",
+                fit: ms.singleWindowFit ?? settings.dwindleSingleWindowFit,
+                modes: SingleWindowFit.dwindleModes,
+                isOverridden: ms.singleWindowFit != nil,
+                onChange: { newValue in updateSetting { $0.singleWindowFit = newValue } },
+                onReset: { updateSetting { $0.singleWindowFit = nil } }
             )
 
             OverridableToggle(

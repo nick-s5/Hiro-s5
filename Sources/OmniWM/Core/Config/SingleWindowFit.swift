@@ -1,0 +1,120 @@
+import CoreGraphics
+import Foundation
+
+struct SingleWindowFit: Equatable {
+    enum Mode: String, CaseIterable, Identifiable, Equatable {
+        case fill
+        case custom
+        case columnWidth
+
+        var id: String {
+            rawValue
+        }
+
+        var displayName: String {
+            switch self {
+            case .fill: "Full Screen"
+            case .custom: "Custom (W:H)"
+            case .columnWidth: "Column Width"
+            }
+        }
+    }
+
+    var mode: Mode
+    var width: Double
+    var height: Double
+
+    init(
+        mode: Mode = .fill,
+        width: Double = SingleWindowFit.defaultWidth,
+        height: Double = SingleWindowFit.defaultHeight
+    ) {
+        self.mode = mode
+        self.width = width
+        self.height = height
+    }
+
+    static let defaultWidth: Double = 1920
+    static let defaultHeight: Double = 1080
+    static let fullScreen = SingleWindowFit(mode: .fill)
+
+    static let dwindleModes: [Mode] = [.fill, .custom]
+    static let niriModes: [Mode] = [.fill, .custom, .columnWidth]
+
+    var hasValidCustomSize: Bool {
+        width > 0 && height > 0 && width.isFinite && height.isFinite
+    }
+
+    func frame(in workingFrame: CGRect) -> CGRect {
+        switch mode {
+        case .fill,
+             .columnWidth:
+            return workingFrame
+        case .custom:
+            guard hasValidCustomSize else { return workingFrame }
+            let w = min(CGFloat(width), workingFrame.width)
+            let h = min(CGFloat(height), workingFrame.height)
+            return CGRect(
+                x: workingFrame.minX + (workingFrame.width - w) / 2,
+                y: workingFrame.minY + (workingFrame.height - h) / 2,
+                width: w,
+                height: h
+            )
+        }
+    }
+}
+
+extension SingleWindowFit {
+    var serialized: String {
+        switch mode {
+        case .fill: "fill"
+        case .columnWidth: "column_width"
+        case .custom: "\(Self.format(width))x\(Self.format(height))"
+        }
+    }
+
+    init(serialized raw: String) {
+        let token = raw.trimmingCharacters(in: .whitespaces).lowercased()
+        switch token {
+        case "fill",
+             "none",
+             "":
+            self = .fullScreen
+        case "column_width",
+             "column-width",
+             "columnwidth":
+            self = SingleWindowFit(mode: .columnWidth)
+        default:
+            if token.contains("x"), let fit = Self.parseCustom(token) {
+                self = fit
+            } else if token.contains(":"), let fit = Self.parseLegacyRatio(token) {
+                self = fit
+            } else {
+                self = .fullScreen
+            }
+        }
+    }
+
+    private static func parseCustom(_ token: String) -> SingleWindowFit? {
+        let parts = token.split(separator: "x", maxSplits: 1)
+        guard parts.count == 2,
+              let w = Double(parts[0]), let h = Double(parts[1]),
+              w > 0, h > 0
+        else { return nil }
+        return SingleWindowFit(mode: .custom, width: w, height: h)
+    }
+
+    private static func parseLegacyRatio(_ token: String) -> SingleWindowFit? {
+        let parts = token.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2,
+              let w = Double(parts[0]), let h = Double(parts[1]),
+              w > 0, h > 0
+        else { return nil }
+        let width = ((w / h) * defaultHeight).rounded()
+        return SingleWindowFit(mode: .custom, width: width, height: defaultHeight)
+    }
+
+    private static func format(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(value)
+    }
+}

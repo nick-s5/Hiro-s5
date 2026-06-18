@@ -286,7 +286,7 @@ final class WMController {
             infiniteLoop: settings.niriInfiniteLoop,
             centerFocusedColumn: settings.niriCenterFocusedColumn,
             alwaysCenterSingleColumn: settings.niriAlwaysCenterSingleColumn,
-            singleWindowAspectRatio: settings.niriSingleWindowAspectRatio,
+            singleWindowFit: settings.niriSingleWindowFit,
             columnWidthPresets: settings.niriColumnWidthPresets,
             defaultColumnWidth: settings.niriDefaultColumnWidth
         )
@@ -298,7 +298,7 @@ final class WMController {
             smartSplit: settings.dwindleSmartSplit,
             defaultSplitRatio: settings.dwindleDefaultSplitRatio,
             splitWidthMultiplier: settings.dwindleSplitWidthMultiplier,
-            singleWindowAspectRatio: settings.dwindleSingleWindowAspectRatio.size
+            singleWindowFit: settings.dwindleSingleWindowFit
         )
 
         updateWorkspaceConfig()
@@ -696,7 +696,11 @@ final class WMController {
         let struts = Struts(
             left: gaps.outerGapLeft,
             right: gaps.outerGapRight,
-            top: normalizedTopStrut(top: gaps.outerGapTop, menuBarInset: menuBarInset, reservedTopInset: reservedTopInset),
+            top: normalizedTopStrut(
+                top: gaps.outerGapTop,
+                menuBarInset: menuBarInset,
+                reservedTopInset: reservedTopInset
+            ),
             bottom: gaps.outerGapBottom
         )
         return computeWorkingArea(parentArea: monitor.visibleFrame, scale: scale, struts: struts)
@@ -790,7 +794,7 @@ final class WMController {
         infiniteLoop: Bool? = nil,
         centerFocusedColumn: CenterFocusedColumn? = nil,
         alwaysCenterSingleColumn: Bool? = nil,
-        singleWindowAspectRatio: SingleWindowAspectRatio? = nil,
+        singleWindowFit: SingleWindowFit? = nil,
         columnWidthPresets: [Double]? = nil,
         defaultColumnWidth: Double?? = nil
     ) {
@@ -799,7 +803,7 @@ final class WMController {
             infiniteLoop: infiniteLoop,
             centerFocusedColumn: centerFocusedColumn,
             alwaysCenterSingleColumn: alwaysCenterSingleColumn,
-            singleWindowAspectRatio: singleWindowAspectRatio,
+            singleWindowFit: singleWindowFit,
             columnWidthPresets: columnWidthPresets,
             defaultColumnWidth: defaultColumnWidth
         )
@@ -813,14 +817,14 @@ final class WMController {
         smartSplit: Bool? = nil,
         defaultSplitRatio: CGFloat? = nil,
         splitWidthMultiplier: CGFloat? = nil,
-        singleWindowAspectRatio: CGSize? = nil,
+        singleWindowFit: SingleWindowFit? = nil,
         innerGap: CGFloat? = nil
     ) {
         dwindleLayoutHandler.updateDwindleConfig(
             smartSplit: smartSplit,
             defaultSplitRatio: defaultSplitRatio,
             splitWidthMultiplier: splitWidthMultiplier,
-            singleWindowAspectRatio: singleWindowAspectRatio,
+            singleWindowFit: singleWindowFit,
             innerGap: innerGap
         )
     }

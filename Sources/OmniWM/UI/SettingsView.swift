@@ -150,7 +150,9 @@ struct GeneralSettingsTab: View {
                         onChange: { v in updateGapSetting(for: monitor) { $0.outerGapBottom = v } },
                         onReset: { updateGapSetting(for: monitor) { $0.outerGapBottom = nil } }
                     )
-                    SettingsCaption("Overrides the global margins for \(monitor.name). Top is measured from the screen's physical top edge.")
+                    SettingsCaption(
+                        "Overrides the global margins for \(monitor.name). Top is measured from the screen's physical top edge."
+                    )
                 } else {
                     SettingsSliderRow(
                         label: "Left",
@@ -374,14 +376,19 @@ private struct GlobalNiriSettingsSection: View {
                     controller.updateNiriConfig(alwaysCenterSingleColumn: newValue)
                 }
 
-            Picker("Single Window Ratio", selection: $settings.niriSingleWindowAspectRatio) {
-                ForEach(SingleWindowAspectRatio.allCases, id: \.self) { ratio in
-                    Text(ratio.displayName).tag(ratio)
+            SingleWindowFitControls(
+                label: "Single Window",
+                fit: settings.niriSingleWindowFit,
+                modes: SingleWindowFit.niriModes,
+                onChange: { newValue in
+                    settings.niriSingleWindowFit = newValue
+                    controller.updateNiriConfig(singleWindowFit: newValue)
                 }
-            }
-            .onChange(of: settings.niriSingleWindowAspectRatio) { _, newValue in
-                controller.updateNiriConfig(singleWindowAspectRatio: newValue)
-            }
+            )
+            SettingsCaption(
+                "How a lone window is sized: Full Screen fills the work area; "
+                    + "Custom uses a fixed width × height; Column Width keeps the Default New Column Width"
+            )
         }
 
         Section("Default New Column Width") {
@@ -529,14 +536,13 @@ private struct MonitorNiriSettingsSection: View {
                 onReset: { updateSetting { $0.alwaysCenterSingleColumn = nil } }
             )
 
-            OverridablePicker(
-                label: "Single Window Ratio",
-                value: ms.singleWindowAspectRatio,
-                globalValue: settings.niriSingleWindowAspectRatio,
-                options: SingleWindowAspectRatio.allCases,
-                displayName: { $0.displayName },
-                onChange: { newValue in updateSetting { $0.singleWindowAspectRatio = newValue } },
-                onReset: { updateSetting { $0.singleWindowAspectRatio = nil } }
+            SingleWindowFitControls(
+                label: "Single Window",
+                fit: ms.singleWindowFit ?? settings.niriSingleWindowFit,
+                modes: SingleWindowFit.niriModes,
+                isOverridden: ms.singleWindowFit != nil,
+                onChange: { newValue in updateSetting { $0.singleWindowFit = newValue } },
+                onReset: { updateSetting { $0.singleWindowFit = nil } }
             )
         }
     }

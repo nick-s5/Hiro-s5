@@ -19,38 +19,6 @@ enum CenterFocusedColumn: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum SingleWindowAspectRatio: String, CaseIterable, Codable, Identifiable {
-    case none
-    case ratio16x9 = "16:9"
-    case ratio4x3 = "4:3"
-    case ratio21x9 = "21:9"
-    case square = "1:1"
-
-    var id: String {
-        rawValue
-    }
-
-    var displayName: String {
-        switch self {
-        case .none: "None (Fill)"
-        case .ratio16x9: "16:9"
-        case .ratio4x3: "4:3"
-        case .ratio21x9: "21:9"
-        case .square: "Square"
-        }
-    }
-
-    var ratio: CGFloat? {
-        switch self {
-        case .none: nil
-        case .ratio16x9: 16.0 / 9.0
-        case .ratio4x3: 4.0 / 3.0
-        case .ratio21x9: 21.0 / 9.0
-        case .square: 1.0
-        }
-    }
-}
-
 struct WorkingAreaContext {
     var workingFrame: CGRect
     var viewFrame: CGRect
@@ -132,7 +100,7 @@ final class NiriLayoutEngine {
 
     var alwaysCenterSingleColumn: Bool = false
 
-    var singleWindowAspectRatio: SingleWindowAspectRatio = .none
+    var singleWindowFit: SingleWindowFit = .fullScreen
 
     var renderStyle: NiriRenderStyle = .default
 
@@ -235,11 +203,12 @@ final class NiriLayoutEngine {
     struct SingleWindowLayoutContext {
         let container: NiriContainer
         let window: NiriWindow
-        let aspectRatio: CGFloat
+        let fit: SingleWindowFit
     }
 
     func singleWindowLayoutContext(in workspaceId: WorkspaceDescriptor.ID) -> SingleWindowLayoutContext? {
-        guard let aspectRatio = effectiveSingleWindowAspectRatio(in: workspaceId).ratio else {
+        let fit = effectiveSingleWindowFit(in: workspaceId)
+        guard fit.mode != .columnWidth else {
             return nil
         }
 
@@ -262,7 +231,7 @@ final class NiriLayoutEngine {
         return SingleWindowLayoutContext(
             container: column,
             window: window,
-            aspectRatio: aspectRatio
+            fit: fit
         )
     }
 
@@ -337,7 +306,7 @@ final class NiriLayoutEngine {
         infiniteLoop: Bool? = nil,
         centerFocusedColumn: CenterFocusedColumn? = nil,
         alwaysCenterSingleColumn: Bool? = nil,
-        singleWindowAspectRatio: SingleWindowAspectRatio? = nil,
+        singleWindowFit: SingleWindowFit? = nil,
         presetColumnWidths: [PresetSize]? = nil,
         defaultColumnWidth: CGFloat?? = nil
     ) {
@@ -354,8 +323,8 @@ final class NiriLayoutEngine {
         if let centerSingle = alwaysCenterSingleColumn {
             self.alwaysCenterSingleColumn = centerSingle
         }
-        if let aspectRatio = singleWindowAspectRatio {
-            self.singleWindowAspectRatio = aspectRatio
+        if let singleWindowFit {
+            self.singleWindowFit = singleWindowFit
         }
         // Double optional distinguishes "no config change" from "set Auto/nil".
         if let defaultColumnWidth {
