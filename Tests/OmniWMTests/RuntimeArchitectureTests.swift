@@ -3434,6 +3434,7 @@ final class RuntimeArchitectureTests: XCTestCase {
             frame: monitor.frame,
             visibleFrame: monitor.visibleFrame,
             workingFrame: monitor.visibleFrame,
+            fullscreenLayoutFrame: monitor.visibleFrame,
             scale: 1,
             orientation: monitor.autoOrientation
         )

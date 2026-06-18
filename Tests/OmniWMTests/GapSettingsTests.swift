@@ -104,6 +104,35 @@ final class GapSettingsTests: XCTestCase {
         XCTAssertEqual(result.height, 1000)
     }
 
+    @MainActor
+    func testFullscreenLayoutFrameIgnoresOuterGapsButKeepsWorkspaceBarReserve() {
+        let settings = makeSettingsStore()
+        settings.outerGapLeft = 12
+        settings.outerGapRight = 12
+        settings.outerGapTop = 46
+        settings.outerGapBottom = 14
+        settings.workspaceBarReserveLayoutSpace = true
+        settings.workspaceBarHeight = 24
+        let controller = WMController(settings: settings)
+        let monitor = Monitor(
+            id: .init(displayId: 1),
+            displayId: 1,
+            frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 860),
+            hasNotch: false,
+            name: "Built-in"
+        )
+
+        XCTAssertEqual(
+            controller.insetWorkingFrame(for: monitor),
+            CGRect(x: 12, y: 14, width: 1416, height: 816)
+        )
+        XCTAssertEqual(
+            controller.fullscreenLayoutFrame(for: monitor),
+            CGRect(x: 0, y: 0, width: 1440, height: 836)
+        )
+    }
+
     private func makeMonitor(displayId: CGDirectDisplayID, name: String) -> Monitor {
         Monitor(
             id: .init(displayId: displayId),

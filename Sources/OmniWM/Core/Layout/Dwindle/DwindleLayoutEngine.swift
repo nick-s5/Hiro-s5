@@ -346,7 +346,8 @@ final class DwindleLayoutEngine {
         _ tokens: [WindowToken],
         in workspaceId: WorkspaceDescriptor.ID,
         focusedToken: WindowToken?,
-        bootstrapScreen: CGRect? = nil
+        bootstrapScreen: CGRect? = nil,
+        bootstrapFullscreenScreen: CGRect? = nil
     ) -> Set<WindowToken> {
         assertSanctionedMutation()
         let existingWindows = Set(roots[workspaceId]?.collectAllWindows() ?? [])
@@ -372,7 +373,11 @@ final class DwindleLayoutEngine {
            let bootstrapScreen,
            windowCount(in: workspaceId) > 0
         {
-            _ = calculateLayout(for: workspaceId, screen: bootstrapScreen)
+            _ = calculateLayout(
+                for: workspaceId,
+                screen: bootstrapScreen,
+                fullscreenScreen: bootstrapFullscreenScreen ?? bootstrapScreen
+            )
         }
 
         var activeFrame: CGRect?
@@ -387,7 +392,11 @@ final class DwindleLayoutEngine {
         for token in toAdd {
             addWindow(token: token, to: workspaceId, activeWindowFrame: activeFrame)
             if shouldBootstrapIncrementally, let bootstrapScreen {
-                let frames = calculateLayout(for: workspaceId, screen: bootstrapScreen)
+                let frames = calculateLayout(
+                    for: workspaceId,
+                    screen: bootstrapScreen,
+                    fullscreenScreen: bootstrapFullscreenScreen ?? bootstrapScreen
+                )
                 activeFrame = frames[token]
             } else if let newNode = tokenToNode[token] {
                 activeFrame = newNode.cachedFrame
@@ -399,7 +408,8 @@ final class DwindleLayoutEngine {
 
     func calculateLayout(
         for workspaceId: WorkspaceDescriptor.ID,
-        screen: CGRect
+        screen: CGRect,
+        fullscreenScreen: CGRect? = nil
     ) -> [WindowToken: CGRect] {
         guard let root = roots[workspaceId] else { return [:] }
 
@@ -412,6 +422,7 @@ final class DwindleLayoutEngine {
 
         var output: [WindowToken: CGRect] = [:]
         let tilingArea = screen
+        let fullscreenArea = fullscreenScreen ?? screen
 
         if windowCount == 1 {
             let leaf = root.descendToFirstLeaf()
@@ -420,9 +431,9 @@ final class DwindleLayoutEngine {
             {
                 let rect: CGRect
                 if fullscreen {
-                    rect = screen
+                    rect = fullscreenArea
                 } else {
-                    rect = singleWindowRect(screen: tilingArea)
+                    rect = singleWindowRect(screen: tilingArea, fullscreenScreen: fullscreenArea)
                 }
                 output[handle] = rect
                 leaf.cachedFrame = rect
@@ -432,6 +443,7 @@ final class DwindleLayoutEngine {
                 node: root,
                 rect: tilingArea,
                 tilingArea: tilingArea,
+                fullscreenArea: fullscreenArea,
                 output: &output
             )
         }
@@ -534,6 +546,7 @@ final class DwindleLayoutEngine {
         node: DwindleNode,
         rect: CGRect,
         tilingArea: CGRect,
+        fullscreenArea: CGRect,
         output: inout [WindowToken: CGRect]
     ) {
         switch node.kind {
@@ -542,7 +555,7 @@ final class DwindleLayoutEngine {
 
             let target: CGRect
             if fullscreen {
-                target = tilingArea
+                target = fullscreenArea
             } else {
                 target = DwindleGapCalculator.applyGaps(
                     nodeRect: rect,
@@ -580,10 +593,22 @@ final class DwindleLayoutEngine {
             )
 
             if let first = node.firstChild() {
-                calculateLayoutRecursive(node: first, rect: r1, tilingArea: tilingArea, output: &output)
+                calculateLayoutRecursive(
+                    node: first,
+                    rect: r1,
+                    tilingArea: tilingArea,
+                    fullscreenArea: fullscreenArea,
+                    output: &output
+                )
             }
             if let second = node.secondChild() {
-                calculateLayoutRecursive(node: second, rect: r2, tilingArea: tilingArea, output: &output)
+                calculateLayoutRecursive(
+                    node: second,
+                    rect: r2,
+                    tilingArea: tilingArea,
+                    fullscreenArea: fullscreenArea,
+                    output: &output
+                )
             }
         }
     }
@@ -694,8 +719,9 @@ final class DwindleLayoutEngine {
         }
     }
 
-    private func singleWindowRect(screen: CGRect) -> CGRect {
-        settings.singleWindowFit.frame(in: screen)
+    private func singleWindowRect(screen: CGRect, fullscreenScreen: CGRect) -> CGRect {
+        let baseFrame = settings.singleWindowFit.mode == .fill ? fullscreenScreen : screen
+        return settings.singleWindowFit.frame(in: baseFrame)
     }
 
     func findGeometricNeighbor(

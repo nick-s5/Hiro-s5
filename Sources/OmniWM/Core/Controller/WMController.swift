@@ -685,12 +685,7 @@ final class WMController {
 
     func insetWorkingFrame(for monitor: Monitor) -> CGRect {
         let scale = NSScreen.screens.first(where: { $0.displayId == monitor.displayId })?.backingScaleFactor ?? 2.0
-        let resolved = settings.resolvedBarSettings(for: monitor)
-        let reservedTopInset = WorkspaceBarGeometry.resolve(
-            monitor: monitor,
-            resolved: resolved,
-            isVisible: isWorkspaceBarVisible(on: monitor, resolved: resolved)
-        ).reservedTopInset
+        let reservedTopInset = workspaceBarReservedTopInset(for: monitor)
         let gaps = settings.resolvedGapSettings(for: monitor)
         let menuBarInset = max(0, monitor.frame.maxY - monitor.visibleFrame.maxY)
         let struts = Struts(
@@ -704,6 +699,21 @@ final class WMController {
             bottom: gaps.outerGapBottom
         )
         return computeWorkingArea(parentArea: monitor.visibleFrame, scale: scale, struts: struts)
+    }
+
+    func fullscreenLayoutFrame(for monitor: Monitor) -> CGRect {
+        let scale = NSScreen.screens.first(where: { $0.displayId == monitor.displayId })?.backingScaleFactor ?? 2.0
+        let struts = Struts(top: workspaceBarReservedTopInset(for: monitor))
+        return computeWorkingArea(parentArea: monitor.visibleFrame, scale: scale, struts: struts)
+    }
+
+    private func workspaceBarReservedTopInset(for monitor: Monitor) -> CGFloat {
+        let resolved = settings.resolvedBarSettings(for: monitor)
+        return WorkspaceBarGeometry.resolve(
+            monitor: monitor,
+            resolved: resolved,
+            isVisible: isWorkspaceBarVisible(on: monitor, resolved: resolved)
+        ).reservedTopInset
     }
 
     func updateHotkeyBindings(_ bindings: [HotkeyBinding], force: Bool = false) {

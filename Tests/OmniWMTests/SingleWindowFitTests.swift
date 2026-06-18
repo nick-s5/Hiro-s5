@@ -106,4 +106,205 @@ final class DwindleSingleWindowFitEngineTests: XCTestCase {
         XCTAssertEqual(frame, CGRect(x: 320, y: 180, width: 1920, height: 1080))
         XCTAssertEqual(frame?.height.isFinite, true)
     }
+
+    func testFullScreenFitMatchesFullscreenLayoutFrame() {
+        let fixture = makeSingleWindowFixture()
+        fixture.engine.settings.singleWindowFit = SingleWindowFit(mode: .fill)
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+
+        let fillFrame = fixture.engine.calculateLayout(
+            for: fixture.workspaceId,
+            screen: workingFrame,
+            fullscreenScreen: fullscreenFrame
+        )[fixture.token]
+        _ = fixture.engine.toggleFullscreen(in: fixture.workspaceId)
+        let fullscreenResult = fixture.engine.calculateLayout(
+            for: fixture.workspaceId,
+            screen: workingFrame,
+            fullscreenScreen: fullscreenFrame
+        )[fixture.token]
+
+        XCTAssertEqual(fillFrame, fullscreenFrame)
+        XCTAssertEqual(fullscreenResult, fillFrame)
+    }
+
+    func testCustomFitStaysBoundedByWorkingFrame() {
+        let fixture = makeSingleWindowFixture()
+        fixture.engine.settings.singleWindowFit = SingleWindowFit(mode: .custom, width: 800, height: 600)
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+
+        let frame = fixture.engine.calculateLayout(
+            for: fixture.workspaceId,
+            screen: workingFrame,
+            fullscreenScreen: fullscreenFrame
+        )[fixture.token]
+
+        XCTAssertEqual(frame, CGRect(x: 224, y: 96, width: 800, height: 600))
+    }
+
+    func testFullscreenLeafInMultiWindowLayoutUsesFullscreenLayoutFrame() {
+        let engine = DwindleLayoutEngine()
+        let workspaceId = WorkspaceDescriptor.ID()
+        let first = WindowToken(pid: 1, windowId: 1)
+        let second = WindowToken(pid: 2, windowId: 2)
+        _ = engine.addWindow(token: first, to: workspaceId, activeWindowFrame: nil)
+        _ = engine.addWindow(token: second, to: workspaceId, activeWindowFrame: nil)
+        _ = engine.toggleFullscreen(in: workspaceId)
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+
+        let frames = engine.calculateLayout(
+            for: workspaceId,
+            screen: workingFrame,
+            fullscreenScreen: fullscreenFrame
+        )
+
+        XCTAssertEqual(frames[second], fullscreenFrame)
+        XCTAssertNotEqual(frames[first], fullscreenFrame)
+    }
+}
+
+final class NiriSingleWindowFitEngineTests: XCTestCase {
+    private struct Fixture {
+        let engine: NiriLayoutEngine
+        let workspaceId: WorkspaceDescriptor.ID
+        let token: WindowToken
+        let window: NiriWindow
+    }
+
+    private func makeSingleWindowFixture() -> Fixture {
+        let engine = NiriLayoutEngine()
+        let workspaceId = WorkspaceDescriptor.ID()
+        let token = WindowToken(pid: 1, windowId: 1)
+        let window = engine.addWindow(
+            token: token,
+            to: workspaceId,
+            afterSelection: nil
+        )
+        return Fixture(engine: engine, workspaceId: workspaceId, token: token, window: window)
+    }
+
+    func testFullScreenFitMatchesFullscreenLayoutFrame() {
+        let fixture = makeSingleWindowFixture()
+        fixture.engine.singleWindowFit = SingleWindowFit(mode: .fill)
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let area = WorkingAreaContext(
+            workingFrame: workingFrame,
+            fullscreenLayoutFrame: fullscreenFrame,
+            viewFrame: fullscreenFrame,
+            scale: 1
+        )
+
+        let frame = fixture.engine.calculateLayout(
+            state: ViewportState(),
+            workspaceId: fixture.workspaceId,
+            monitorFrame: workingFrame,
+            gaps: (horizontal: 12, vertical: 12),
+            workingArea: area
+        )[fixture.token]
+
+        XCTAssertEqual(frame, fullscreenFrame)
+        XCTAssertEqual(fixture.window.sizingMode, .normal)
+    }
+
+    func testFullscreenSizingUsesFullscreenLayoutFrame() {
+        let fixture = makeSingleWindowFixture()
+        fixture.window.sizingMode = .fullscreen
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let area = WorkingAreaContext(
+            workingFrame: workingFrame,
+            fullscreenLayoutFrame: fullscreenFrame,
+            viewFrame: fullscreenFrame,
+            scale: 1
+        )
+
+        let frame = fixture.engine.calculateLayout(
+            state: ViewportState(),
+            workspaceId: fixture.workspaceId,
+            monitorFrame: workingFrame,
+            gaps: (horizontal: 12, vertical: 12),
+            workingArea: area
+        )[fixture.token]
+
+        XCTAssertEqual(frame, fullscreenFrame)
+    }
+
+    func testCustomFitStaysBoundedByWorkingFrame() {
+        let fixture = makeSingleWindowFixture()
+        fixture.engine.singleWindowFit = SingleWindowFit(mode: .custom, width: 800, height: 600)
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let area = WorkingAreaContext(
+            workingFrame: workingFrame,
+            fullscreenLayoutFrame: fullscreenFrame,
+            viewFrame: fullscreenFrame,
+            scale: 1
+        )
+
+        let frame = fixture.engine.calculateLayout(
+            state: ViewportState(),
+            workspaceId: fixture.workspaceId,
+            monitorFrame: workingFrame,
+            gaps: (horizontal: 12, vertical: 12),
+            workingArea: area
+        )[fixture.token]
+
+        XCTAssertEqual(frame, CGRect(x: 224, y: 96, width: 800, height: 600))
+    }
+
+    func testManualSingleWindowWidthStaysBoundedByWorkingFrame() throws {
+        let fixture = makeSingleWindowFixture()
+        fixture.engine.singleWindowFit = SingleWindowFit(mode: .fill)
+        let column = try XCTUnwrap(fixture.engine.columns(in: fixture.workspaceId).first)
+        column.hasManualSingleWindowWidthOverride = true
+        column.cachedWidth = 700
+        let workingFrame = CGRect(x: 24, y: 16, width: 1200, height: 760)
+        let fullscreenFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        let area = WorkingAreaContext(
+            workingFrame: workingFrame,
+            fullscreenLayoutFrame: fullscreenFrame,
+            viewFrame: fullscreenFrame,
+            scale: 1
+        )
+
+        let frame = fixture.engine.calculateLayout(
+            state: ViewportState(),
+            workspaceId: fixture.workspaceId,
+            monitorFrame: workingFrame,
+            gaps: (horizontal: 12, vertical: 12),
+            workingArea: area
+        )[fixture.token]
+
+        XCTAssertEqual(frame, CGRect(x: 274, y: 16, width: 700, height: 760))
+    }
+
+    func testHiddenPlacementKeepsOnePhysicalPixelReveal() {
+        let monitor = HiddenPlacementMonitorContext(
+            id: Monitor.ID(displayId: 1),
+            frame: CGRect(x: 0, y: 0, width: 1280, height: 800),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1280, height: 760)
+        )
+        let size = CGSize(width: 400, height: 300)
+
+        let placement = HiddenWindowPlacementResolver.placement(
+            for: size,
+            requestedEdge: .maximum,
+            orthogonalOrigin: 40,
+            baseReveal: 1,
+            scale: 2,
+            orientation: .horizontal,
+            monitor: monitor,
+            monitors: [monitor]
+        )
+        let frame = placement.frame(for: size)
+
+        XCTAssertEqual(frame.minX, monitor.visibleFrame.maxX - 0.5)
+        XCTAssertEqual(frame.minY, 40)
+        XCTAssertEqual(frame.width, size.width)
+        XCTAssertEqual(frame.height, size.height)
+    }
 }

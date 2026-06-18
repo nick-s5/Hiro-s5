@@ -19,6 +19,7 @@ struct LayoutMonitorSnapshot {
     let frame: CGRect
     let visibleFrame: CGRect
     let workingFrame: CGRect
+    let fullscreenLayoutFrame: CGRect
     let scale: CGFloat
     let orientation: Monitor.Orientation
 }

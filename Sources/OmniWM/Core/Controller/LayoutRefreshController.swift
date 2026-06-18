@@ -663,6 +663,7 @@ import QuartzCore
             frame: monitor.frame,
             visibleFrame: monitor.visibleFrame,
             workingFrame: controller?.insetWorkingFrame(for: monitor) ?? monitor.visibleFrame,
+            fullscreenLayoutFrame: controller?.fullscreenLayoutFrame(for: monitor) ?? monitor.visibleFrame,
             scale: backingScale(for: monitor),
             orientation: orientation ?? monitor.autoOrientation
         )

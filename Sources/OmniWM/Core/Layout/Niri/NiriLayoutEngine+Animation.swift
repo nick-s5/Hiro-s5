@@ -205,6 +205,7 @@ extension NiriLayoutEngine {
     ) -> LayoutResult {
         let area = workingArea ?? WorkingAreaContext(
             workingFrame: monitor.visibleFrame,
+            fullscreenLayoutFrame: monitor.visibleFrame,
             viewFrame: monitor.frame,
             scale: 2.0
         )
@@ -243,6 +244,7 @@ extension NiriLayoutEngine {
 
         let area = workingArea ?? WorkingAreaContext(
             workingFrame: monitor.visibleFrame,
+            fullscreenLayoutFrame: monitor.visibleFrame,
             viewFrame: monitor.frame,
             scale: 2.0
         )

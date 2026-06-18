@@ -346,7 +346,8 @@ import QuartzCore
             windowTokens,
             in: snapshot.workspaceId,
             focusedToken: snapshot.preferredFocusToken,
-            bootstrapScreen: snapshot.monitor.workingFrame
+            bootstrapScreen: snapshot.monitor.workingFrame,
+            bootstrapFullscreenScreen: snapshot.monitor.fullscreenLayoutFrame
         )
 
         for window in snapshot.windows {
@@ -355,7 +356,8 @@ import QuartzCore
 
         let newFrames = engine.calculateLayout(
             for: snapshot.workspaceId,
-            screen: snapshot.monitor.workingFrame
+            screen: snapshot.monitor.workingFrame,
+            fullscreenScreen: snapshot.monitor.fullscreenLayoutFrame
         )
 
         let rememberedFocusToken: WindowToken?
@@ -413,7 +415,8 @@ import QuartzCore
 
         let frames = engine.calculateLayout(
             for: snapshot.workspaceId,
-            screen: snapshot.monitor.workingFrame
+            screen: snapshot.monitor.workingFrame,
+            fullscreenScreen: snapshot.monitor.fullscreenLayoutFrame
         )
         let diff = layoutDiff(
             windows: snapshot.windows,
@@ -441,7 +444,8 @@ import QuartzCore
 
         let baseFrames = engine.calculateLayout(
             for: snapshot.workspaceId,
-            screen: snapshot.monitor.workingFrame
+            screen: snapshot.monitor.workingFrame,
+            fullscreenScreen: snapshot.monitor.fullscreenLayoutFrame
         )
         let animatedFrames = engine.calculateAnimatedFrames(
             baseFrames: baseFrames,

@@ -127,6 +127,7 @@ extension NiriLayoutEngine {
         guard !containers.isEmpty else { return }
 
         let workingFrame = workingArea?.workingFrame ?? monitorFrame
+        let fullscreenLayoutFrame = workingArea?.fullscreenLayoutFrame ?? workingFrame
         let viewFrame = workingArea?.viewFrame ?? screenFrame ?? monitorFrame
         let effectiveScale = workingArea?.scale ?? scale
 
@@ -143,7 +144,7 @@ extension NiriLayoutEngine {
 
         let time = animationTime ?? CACurrentMediaTime()
         let workspaceOffset: CGFloat = 0
-        let canonicalFullscreenRect = workingFrame.roundedToPhysicalPixels(scale: effectiveScale)
+        let canonicalFullscreenRect = fullscreenLayoutFrame.roundedToPhysicalPixels(scale: effectiveScale)
         let renderedFullscreenRect = canonicalFullscreenRect
             .offsetBy(dx: workspaceOffset, dy: 0)
             .roundedToPhysicalPixels(scale: effectiveScale)
@@ -152,6 +153,7 @@ extension NiriLayoutEngine {
             layoutSingleWindowWorkspace(
                 singleWindowContext,
                 workingFrame: workingFrame,
+                fullscreenLayoutFrame: fullscreenLayoutFrame,
                 fullscreenRect: canonicalFullscreenRect,
                 renderedFullscreenRect: renderedFullscreenRect,
                 workspaceOffset: workspaceOffset,
@@ -583,11 +585,13 @@ extension NiriLayoutEngine {
     func resolvedSingleWindowRect(
         for context: SingleWindowLayoutContext,
         in workingFrame: CGRect,
+        fullscreenLayoutFrame: CGRect? = nil,
         scale: CGFloat,
         gaps: CGFloat
     ) -> CGRect {
         guard context.container.hasManualSingleWindowWidthOverride else {
-            return context.fit.frame(in: workingFrame).roundedToPhysicalPixels(scale: scale)
+            let baseFrame = context.fit.mode == .fill ? fullscreenLayoutFrame ?? workingFrame : workingFrame
+            return context.fit.frame(in: baseFrame).roundedToPhysicalPixels(scale: scale)
         }
 
         if context.container.cachedWidth <= 0 {
@@ -610,6 +614,7 @@ extension NiriLayoutEngine {
     private func layoutSingleWindowWorkspace(
         _ context: SingleWindowLayoutContext,
         workingFrame: CGRect,
+        fullscreenLayoutFrame: CGRect,
         fullscreenRect: CGRect,
         renderedFullscreenRect: CGRect,
         workspaceOffset: CGFloat,
@@ -622,6 +627,7 @@ extension NiriLayoutEngine {
         let canonicalRect = resolvedSingleWindowRect(
             for: context,
             in: workingFrame,
+            fullscreenLayoutFrame: fullscreenLayoutFrame,
             scale: scale,
             gaps: gaps
         )

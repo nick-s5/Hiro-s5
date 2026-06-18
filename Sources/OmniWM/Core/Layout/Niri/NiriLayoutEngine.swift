@@ -21,8 +21,21 @@ enum CenterFocusedColumn: String, CaseIterable, Codable, Identifiable {
 
 struct WorkingAreaContext {
     var workingFrame: CGRect
+    var fullscreenLayoutFrame: CGRect
     var viewFrame: CGRect
     var scale: CGFloat
+
+    init(
+        workingFrame: CGRect,
+        fullscreenLayoutFrame: CGRect? = nil,
+        viewFrame: CGRect,
+        scale: CGFloat
+    ) {
+        self.workingFrame = workingFrame
+        self.fullscreenLayoutFrame = fullscreenLayoutFrame ?? workingFrame
+        self.viewFrame = viewFrame
+        self.scale = scale
+    }
 }
 
 struct Struts {

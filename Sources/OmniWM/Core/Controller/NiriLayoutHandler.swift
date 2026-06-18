@@ -337,6 +337,7 @@ enum NiriWindowMoveResult {
 
         let area = WorkingAreaContext(
             workingFrame: snapshot.monitor.workingFrame,
+            fullscreenLayoutFrame: snapshot.monitor.fullscreenLayoutFrame,
             viewFrame: snapshot.monitor.frame,
             scale: snapshot.monitor.scale
         )
@@ -848,6 +849,7 @@ enum NiriWindowMoveResult {
 
         let area = WorkingAreaContext(
             workingFrame: pass.insetFrame,
+            fullscreenLayoutFrame: snapshot.monitor.fullscreenLayoutFrame,
             viewFrame: snapshot.monitor.frame,
             scale: snapshot.monitor.scale
         )
@@ -2003,6 +2005,7 @@ struct NodeActivationOptions {
             .backingScaleFactor ?? 2.0
         let workingArea = WorkingAreaContext(
             workingFrame: workingFrame,
+            fullscreenLayoutFrame: controller.fullscreenLayoutFrame(for: monitor),
             viewFrame: monitor.frame,
             scale: scale
         )
