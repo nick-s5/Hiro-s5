@@ -3,6 +3,7 @@
 
 import AppKit
 import Observation
+import OmniWMIPC
 
 @MainActor @Observable
 public final class AppBootstrapState {
@@ -106,6 +107,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         AppDelegate.sharedBootstrap?.settings = settings
         AppDelegate.sharedBootstrap?.controller = controller
         AppDelegate.sharedBootstrap?.updateCoordinator = updateCoordinator
+
+        FatalCapture.install(controllerProvider: { AppDelegate.sharedBootstrap?.controller })
+        controller.pendingCrashReport = FatalCapture.consumePending()
 
         statusBarController = StatusBarController(
             settings: settings,

@@ -352,8 +352,10 @@ final class AXEventHandler {
     private var createdWindowRetryCountById: [UInt32: Int] = [:]
     private var windowCloseFocusRecoveryContext: WindowCloseFocusRecoveryContext?
     private var recentMouseFocusIntent: RecentMouseFocusIntent?
-    private var createFocusTrace: [NiriCreateFocusTraceEvent] = []
-    private var managedReplacementTrace: [ManagedReplacementTraceEvent] = []
+    private var createFocusTrace =
+        RingBuffer<NiriCreateFocusTraceEvent>(capacity: AXEventHandler.createFocusTraceLimit)
+    private var managedReplacementTrace =
+        RingBuffer<ManagedReplacementTraceEvent>(capacity: AXEventHandler.managedReplacementTraceLimit)
     private var nextManagedReplacementEventSequence: UInt64 = 0
     var visibleWindowInfoProvider: () -> [WindowServerInfo]
 
@@ -627,14 +629,30 @@ final class AXEventHandler {
     }
 
     func recordNiriCreateFocusTrace(_ event: NiriCreateFocusTraceEvent) {
-        if createFocusTrace.count == Self.createFocusTraceLimit {
-            createFocusTrace.removeFirst()
-        }
         createFocusTrace.append(event)
 
         if Self.createFocusTraceLoggingEnabled {
-            fputs("[NiriCreateFocus] \(event.description)\n", stderr)
+            Log.ax.debug("[NiriCreateFocus] \(event.description)")
         }
+    }
+
+    func createFocusTraceDump() -> String {
+        let events = createFocusTrace.snapshot()
+        guard !events.isEmpty else { return "none" }
+        return events
+            .map { "\($0.timestamp.ISO8601Format()) \($0.description)" }
+            .joined(separator: "\n")
+    }
+
+    func managedReplacementTraceDump() -> String {
+        let events = managedReplacementTrace.snapshot()
+        guard !events.isEmpty else { return "none" }
+        return events
+            .map {
+                "uptime=\(String(format: "%.3f", $0.timestamp)) pid=\($0.pid)"
+                    + " workspace=\($0.workspaceId.uuidString) \(String(describing: $0.kind))"
+            }
+            .joined(separator: "\n")
     }
 
     private func managedReplacementCurrentUptime() -> TimeInterval {
@@ -658,15 +676,11 @@ final class AXEventHandler {
             workspaceId: key.workspaceId,
             kind: kind
         )
-        if managedReplacementTrace.count == Self.managedReplacementTraceLimit {
-            managedReplacementTrace.removeFirst()
-        }
         managedReplacementTrace.append(event)
 
         if Self.managedReplacementTraceLoggingEnabled {
-            fputs(
-                "[ManagedReplacement] pid=\(key.pid) workspace=\(key.workspaceId.uuidString) kind=\(String(describing: kind))\n",
-                stderr
+            Log.ax.debug(
+                "[ManagedReplacement] pid=\(key.pid) workspace=\(key.workspaceId.uuidString) kind=\(String(describing: kind))"
             )
         }
     }

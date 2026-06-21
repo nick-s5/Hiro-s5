@@ -7,21 +7,35 @@ struct SettingsView: View {
     @Bindable var settings: SettingsStore
     @Bindable var controller: WMController
     let updateCoordinator: (any AppUpdateCoordinating)?
+    let navigation: SettingsNavigationModel
     @State private var selectedSection: SettingsSection = .general
 
     var body: some View {
         NavigationSplitView {
-            SettingsSidebar(selection: $selectedSection)
+            SettingsSidebar(
+                selection: $selectedSection,
+                diagnosticsIssueCount: controller.diagnosticsIssues.count
+            )
         } detail: {
             SettingsDetailView(
                 section: selectedSection,
                 settings: settings,
                 controller: controller,
-                updateCoordinator: updateCoordinator
+                updateCoordinator: updateCoordinator,
+                navigation: navigation
             )
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 760, minHeight: 560)
+        .onAppear {
+            selectedSection = navigation.section
+        }
+        .onChange(of: navigation.section) { _, newValue in
+            selectedSection = newValue
+        }
+        .task(id: selectedSection) {
+            controller.refreshDiagnosticsIssues()
+        }
     }
 }
 

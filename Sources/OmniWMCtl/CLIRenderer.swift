@@ -198,10 +198,6 @@ enum CLIRenderer {
             return formattedSubscriptions(payload, format: format)
         case let .capabilities(payload):
             return formattedCapabilities(payload, format: format)
-        case let .focusedWindowDecision(payload):
-            return formattedFocusedWindowDecision(payload, format: format)
-        case let .reconcileDebug(payload):
-            return formattedReconcileDebug(payload)
         case let .subscribed(payload):
             return "subscribed: \(payload.channels.map(\.rawValue).joined(separator: ", "))"
         }
@@ -453,49 +449,6 @@ enum CLIRenderer {
         ]
 
         return formatRows(headers: ["CAPABILITY", "VALUE"], rows: rows, format: format)
-    }
-
-    private static func formattedFocusedWindowDecision(
-        _ payload: IPCFocusedWindowDecisionQueryResult,
-        format: CLIOutputFormat
-    ) -> String {
-        guard let window = payload.window else {
-            return "no focused window decision snapshot"
-        }
-
-        let rows = [
-            ["id", window.id ?? "-"],
-            ["app", window.app?.name ?? "-"],
-            ["title", window.title ?? "-"],
-            ["disposition", window.disposition.rawValue],
-            ["source", window.source],
-            ["layout-decision", window.layoutDecisionKind.rawValue],
-            ["admission", window.admissionOutcome.rawValue],
-            ["workspace", window.workspace?.displayName ?? "-"],
-            ["matched-rule-id", window.matchedRuleId ?? "-"]
-        ]
-
-        return formatRows(headers: ["FIELD", "VALUE"], rows: rows, format: format)
-    }
-
-    private static func formattedReconcileDebug(_ payload: IPCReconcileDebugQueryResult) -> String {
-        let snapshot = payload.snapshot.isEmpty ? "snapshot empty" : payload.snapshot
-        let trace = payload.trace.isEmpty ? "trace empty" : payload.trace
-        let metrics = payload.metrics.isEmpty ? "metrics empty" : payload.metrics
-
-        return """
-        SNAPSHOT
-        --------
-        \(snapshot)
-
-        LAYOUT BUILD METRICS
-        --------------------
-        \(metrics)
-
-        TRACE (last \(payload.traceLimit))
-        ---------------
-        \(trace)
-        """
     }
 
     private static func formatAppSummary(_ apps: [IPCManagedAppSummary], format: CLIOutputFormat) -> String {

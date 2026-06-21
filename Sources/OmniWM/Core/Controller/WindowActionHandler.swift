@@ -63,7 +63,7 @@ final class WindowActionHandler {
 
     @ObservationIgnored
     private lazy var overviewController: OverviewController = {
-        guard let controller else { fatalError("WindowActionHandler requires controller") }
+        guard let controller else { fatal("WindowActionHandler requires controller") }
         let oc = OverviewController(wmController: controller, motionPolicy: controller.motionPolicy)
         oc.onActivateWindow = { [weak self] handle, workspaceId in
             self?.activateWindowFromOverview(handle: handle, workspaceId: workspaceId)

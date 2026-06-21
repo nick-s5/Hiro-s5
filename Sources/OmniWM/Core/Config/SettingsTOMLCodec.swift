@@ -57,6 +57,19 @@ enum SettingsTOMLCodec {
             return canonical.toSettingsExport()
         }
     }
+
+    static func unknownKeyPaths(in data: Data) -> [String] {
+        guard !data.isEmpty else { return [] }
+        do {
+            let decoder = TOMLDecoder()
+            let raw = try decoder.decode([String: TOMLNode].self, from: data)
+            let known = try decoder.decode([String: TOMLNode].self, from: encodeCanonical(decode(data)))
+            let stripped = TOMLNode.strippingRetiredKeys(raw)
+            return TOMLNode.unknownKeyPaths(raw: stripped, known: known, prefix: "").sorted()
+        } catch {
+            return []
+        }
+    }
 }
 
 private enum TOMLNode: Codable, Equatable {
@@ -173,6 +186,37 @@ private enum TOMLNode: Codable, Equatable {
         mouseWarp.removeValue(forKey: "axis")
         var result = tree
         result["mouseWarp"] = .table(mouseWarp)
+        return result
+    }
+
+    static func unknownKeyPaths(
+        raw: [String: TOMLNode],
+        known: [String: TOMLNode],
+        prefix: String
+    ) -> [String] {
+        var result: [String] = []
+        for (key, rawValue) in raw {
+            let path = prefix.isEmpty ? key : "\(prefix).\(key)"
+            guard let knownValue = known[key] else {
+                result.append(path)
+                continue
+            }
+            if case let .table(rawTable) = rawValue, case let .table(knownTable) = knownValue {
+                result.append(contentsOf: unknownKeyPaths(raw: rawTable, known: knownTable, prefix: path))
+            } else if case let .array(rawArray) = rawValue, case let .array(knownArray) = knownValue {
+                for (index, rawElement) in rawArray.enumerated() {
+                    guard case let .table(rawTable) = rawElement,
+                          index < knownArray.count,
+                          case let .table(knownTable) = knownArray[index]
+                    else { continue }
+                    result.append(contentsOf: unknownKeyPaths(
+                        raw: rawTable,
+                        known: knownTable,
+                        prefix: "\(path)[\(index)]"
+                    ))
+                }
+            }
+        }
         return result
     }
 

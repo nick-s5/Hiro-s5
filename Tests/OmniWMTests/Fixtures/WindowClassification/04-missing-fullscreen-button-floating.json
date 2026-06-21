@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-06-23T00:00:00Z",
+  "os": "fixture",
+  "appVersion": "fixture",
+  "ax": {
+    "window": { "attributes": {}, "writable": [], "failed": [], "ignored": [] },
+    "app": { "attributes": {}, "writable": [], "failed": [], "ignored": [] }
+  },
+  "omniwm": {
+    "tokenPid": 1000,
+    "tokenWindowId": 4,
+    "appName": "Utility App",
+    "bundleId": "com.example.nofullscreen",
+    "input": {
+      "appName": "Utility App",
+      "ax": {
+        "role": "AXWindow",
+        "subrole": "AXStandardWindow",
+        "title": "Inspector",
+        "hasCloseButton": true,
+        "hasFullscreenButton": false,
+        "hasZoomButton": true,
+        "hasMinimizeButton": true,
+        "appPolicy": "regular",
+        "bundleId": "com.example.nofullscreen",
+        "attributeFetchSucceeded": true
+      },
+      "appFullscreen": false,
+      "rules": []
+    },
+    "expected": {
+      "disposition": "floating",
+      "source": "heuristic",
+      "heuristicReasons": ["missingFullscreenButton"],
+      "layoutDecisionKind": "fallbackLayout"
+    }
+  }
+}

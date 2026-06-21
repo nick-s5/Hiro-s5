@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-06-23T00:00:00Z",
+  "os": "fixture",
+  "appVersion": "fixture",
+  "ax": {
+    "window": { "attributes": {}, "writable": [], "failed": [], "ignored": [] },
+    "app": { "attributes": {}, "writable": [], "failed": [], "ignored": [] }
+  },
+  "omniwm": {
+    "tokenPid": 1000,
+    "tokenWindowId": 1,
+    "appName": "Standard App",
+    "bundleId": "com.example.standard",
+    "input": {
+      "appName": "Standard App",
+      "ax": {
+        "role": "AXWindow",
+        "subrole": "AXStandardWindow",
+        "title": "Untitled",
+        "hasCloseButton": true,
+        "hasFullscreenButton": true,
+        "fullscreenButtonEnabled": true,
+        "hasZoomButton": true,
+        "hasMinimizeButton": true,
+        "appPolicy": "regular",
+        "bundleId": "com.example.standard",
+        "attributeFetchSucceeded": true
+      },
+      "appFullscreen": false,
+      "rules": []
+    },
+    "expected": {
+      "disposition": "managed",
+      "source": "heuristic",
+      "heuristicReasons": [],
+      "layoutDecisionKind": "fallbackLayout"
+    }
+  }
+}

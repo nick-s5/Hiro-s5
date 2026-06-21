@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-06-23T00:00:00Z",
+  "os": "fixture",
+  "appVersion": "fixture",
+  "ax": {
+    "window": { "attributes": {}, "writable": [], "failed": [], "ignored": [] },
+    "app": { "attributes": {}, "writable": [], "failed": [], "ignored": [] }
+  },
+  "omniwm": {
+    "tokenPid": 1000,
+    "tokenWindowId": 3,
+    "appName": "Dialog App",
+    "bundleId": "com.example.dialog",
+    "input": {
+      "appName": "Dialog App",
+      "ax": {
+        "role": "AXWindow",
+        "subrole": "AXDialog",
+        "title": "Confirm changes?",
+        "hasCloseButton": true,
+        "hasFullscreenButton": false,
+        "hasZoomButton": false,
+        "hasMinimizeButton": false,
+        "appPolicy": "regular",
+        "bundleId": "com.example.dialog",
+        "attributeFetchSucceeded": true
+      },
+      "appFullscreen": false,
+      "rules": []
+    },
+    "expected": {
+      "disposition": "floating",
+      "source": "heuristic",
+      "heuristicReasons": ["nonStandardSubrole"],
+      "layoutDecisionKind": "fallbackLayout"
+    }
+  }
+}

@@ -111,6 +111,14 @@ final class OwnedWindowRegistry {
         surfaceCoordinator.containsInteractive(point: point)
     }
 
+    func containsGeometric(point: CGPoint) -> Bool {
+        surfaceCoordinator.containsGeometric(point: point)
+    }
+
+    func visibleSurfaceInfos() -> [SurfaceScene.VisibleSurfaceInfo] {
+        surfaceCoordinator.visibleSurfaceInfos()
+    }
+
     func contains(window: NSWindow?) -> Bool {
         surfaceCoordinator.contains(window: window)
     }

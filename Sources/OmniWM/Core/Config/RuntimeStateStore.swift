@@ -274,12 +274,12 @@ final class RuntimeStateStore {
             let data = try Data(contentsOf: url)
             return try JSONDecoder().decode(RuntimeState.self, from: data)
         } catch {
-            fputs("[RuntimeStateStore] Failed to load \(url.path): \(error.localizedDescription)\n", stderr)
+            Log.config.error("Failed to load \(url.path): \(error.localizedDescription)")
             return RuntimeState()
         }
     }
 
     private func report(_ message: String) {
-        fputs("[RuntimeStateStore] \(message)\n", stderr)
+        Log.config.error(message)
     }
 }

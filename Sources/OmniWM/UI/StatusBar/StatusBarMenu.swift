@@ -69,6 +69,7 @@ final class StatusBarMenuBuilder {
 
         menu.addItem(createDivider())
 
+        addIssuesWarning(to: menu)
         addSeparateSpacesWarning(to: menu)
 
         menu.addItem(createSectionLabel("CONTROLS"))
@@ -86,6 +87,8 @@ final class StatusBarMenuBuilder {
         addSettingsSection(to: menu)
 
         menu.addItem(createDivider())
+
+        addDiagnosticsSection(to: menu)
 
         menu.addItem(createSectionLabel("LINKS"))
         addLinksSection(to: menu)
@@ -111,6 +114,31 @@ final class StatusBarMenuBuilder {
         toggleViews["workspaceBarEnabled"]?.isOn = settings.workspaceBarEnabled
         toggleViews["preventSleepEnabled"]?.isOn = settings.preventSleepEnabled
         toggleViews["ipcEnabled"]?.isOn = settings.ipcEnabled
+    }
+
+    private func addIssuesWarning(to menu: NSMenu) {
+        guard let controller else { return }
+        controller.refreshDiagnosticsIssues()
+        let issues = controller.diagnosticsIssues
+        guard !issues.isEmpty else { return }
+        let row = MenuActionRowView(
+            icon: "exclamationmark.triangle.fill",
+            label: "Issues Detected (\(issues.count))",
+            showChevron: true,
+            motionPolicy: motionPolicy
+        ) { [weak self] in
+            guard let self, let controller = self.controller else { return }
+            SettingsWindowController.shared.show(
+                settings: self.settings,
+                controller: controller,
+                updateCoordinator: self.updateCoordinator,
+                section: .diagnostics
+            )
+        }
+        let item = NSMenuItem()
+        item.view = row
+        menu.addItem(item)
+        menu.addItem(createDivider())
     }
 
     private func addSeparateSpacesWarning(to menu: NSMenu) {
@@ -140,6 +168,57 @@ final class StatusBarMenuBuilder {
         let item = NSMenuItem()
         item.view = MenuSectionLabelView(text: text)
         return item
+    }
+
+    private func addDiagnosticsSection(to menu: NSMenu) {
+        guard let controller else { return }
+        menu.addItem(createSectionLabel("TROUBLESHOOTING"))
+
+        let recording = controller.isTraceCaptureActive
+        let recordRow = MenuActionRowView(
+            icon: recording ? "stop.circle" : "record.circle",
+            label: recording ? "Stop & Save Recording" : "Start Recording",
+            showChevron: false,
+            motionPolicy: motionPolicy
+        ) { [weak self] in
+            guard let self, let controller = self.controller else { return }
+            let wasRecording = controller.isTraceCaptureActive
+            switch controller.toggleTraceCaptureForUI(desiredState: .toggle) {
+            case .noChange,
+                 .started:
+                break
+            case let .stopped(artifact):
+                NSWorkspace.shared.activateFileViewerSelecting([artifact.url])
+            case let .writeFailed(reason):
+                self.presentInfoAlert(
+                    title: wasRecording ? "Recording could not be saved" : "Recording could not be started",
+                    message: reason
+                )
+            }
+        }
+        let recordItem = NSMenuItem()
+        recordItem.view = recordRow
+        menu.addItem(recordItem)
+
+        let openRow = MenuActionRowView(
+            icon: "stethoscope",
+            label: "Open Troubleshooting…",
+            showChevron: true,
+            motionPolicy: motionPolicy
+        ) { [weak self] in
+            guard let self, let controller = self.controller else { return }
+            SettingsWindowController.shared.show(
+                settings: self.settings,
+                controller: controller,
+                updateCoordinator: self.updateCoordinator,
+                section: .diagnostics
+            )
+        }
+        let openItem = NSMenuItem()
+        openItem.view = openRow
+        menu.addItem(openItem)
+
+        menu.addItem(createDivider())
     }
 
     private func addControlsSection(to menu: NSMenu) {
@@ -396,7 +475,7 @@ final class StatusBarMenuBuilder {
                 settings
             )
         } catch {
-            NSLog("OmniWM settings file action failed: \(error.localizedDescription)")
+            Log.config.error("settings file action failed: \(error.localizedDescription)")
         }
     }
 

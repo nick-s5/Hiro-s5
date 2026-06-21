@@ -199,6 +199,9 @@ final class MouseWarpHandler: NSObject {
 
         state.isWarping = true
         state.lastMonitorId = target.id
+        MouseTrace.record(
+            "edge-warp from=\(sourceMonitor.id) to=\(target.id) dir=\(crossing.direction) dest=\(TraceFormat.point(destination))"
+        )
         let warpPoint = ScreenCoordinateSpace.toWindowServer(point: destination)
         warpCursor(warpPoint)
         _ = controller.workspaceManager.setInteractionMonitor(target.id)

@@ -44,7 +44,8 @@ let package = Package(
             ],
             path: "Sources/OmniWM",
             resources: [
-                .process("Resources")
+                .process("Resources"),
+                .copy("Core/IssueReporter/Prompts")
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
@@ -60,7 +61,8 @@ let package = Package(
                 .linkedLibrary("z"),
                 .linkedLibrary("c++"),
                 .unsafeFlags(["-L\(ghosttyMacOSLibraryDirectory)"]),
-                .unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"])
+                .unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"]),
+                .unsafeFlags(["-Xlinker", "-weak_framework", "-Xlinker", "FoundationModels"])
             ]
         ),
         .executableTarget(
@@ -83,6 +85,9 @@ let package = Package(
             name: "OmniWMTests",
             dependencies: ["OmniWM"],
             path: "Tests/OmniWMTests",
+            resources: [
+                .copy("Fixtures")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]

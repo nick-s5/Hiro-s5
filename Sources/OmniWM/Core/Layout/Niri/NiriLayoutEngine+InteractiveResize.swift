@@ -153,6 +153,11 @@ extension NiriLayoutEngine {
             originalViewOffset: edges.contains(.left) ? viewOffset : nil
         )
 
+        NiriLayoutTrace.record(
+            .resize,
+            workspaceId: workspaceId,
+            "begin win=\(windowId) col=\(colIdx) edges=\(String(describing: edges))"
+        )
         return true
     }
 
@@ -264,6 +269,7 @@ extension NiriLayoutEngine {
             )
         }
 
+        NiriLayoutTrace.record(.resize, workspaceId: resize.workspaceId, "end win=\(resize.windowId)")
         interactiveResize = nil
     }
 }

@@ -44,6 +44,11 @@ final class ServiceLifecycleManager {
         startPermissionMonitoring()
     }
 
+    func restart() {
+        stop()
+        start()
+    }
+
     private func startPermissionMonitoring() {
         permissionCheckerTask?.cancel()
         permissionCheckerTask = Task { @MainActor [weak self, weak controller] in

@@ -68,10 +68,12 @@ final class WMController {
     private(set) var moveMouseToFocusedWindowEnabled: Bool = false
     private(set) var displaySpacesMode: DisplaySpacesMode = .enabled
     private var displaySpacesAlertShown = false
+    var pendingCrashReport: FatalCapture.PendingCrashReport?
+    var diagnosticsIssues: [DiagnosticsIssue] = []
 
     let settings: SettingsStore
     let workspaceManager: WorkspaceManager
-    private let hotkeys = HotkeyCenter()
+    let hotkeys = HotkeyCenter()
     private(set) var hotkeyRegistrationFailures: [HotkeyCommand: HotkeyRegistrationFailureReason] = [:]
     private(set) var systemHyperTriggerFailure: SystemHyperTriggerFailure?
     var isHyperTriggerActive: Bool {
@@ -88,6 +90,7 @@ final class WMController {
     }
 
     let axManager = AXManager()
+    let traceCaptureCoordinator: RuntimeTraceCaptureCoordinator
     let appInfoCache = AppInfoCache()
     let eventIntake = EventIntake()
     let factResolver = FactResolver()
@@ -196,7 +199,7 @@ final class WMController {
     @ObservationIgnored
     private(set) var isMouseWarpPolicyEnabled = false
     @ObservationIgnored
-    private let ownedWindowRegistry: OwnedWindowRegistry
+    let ownedWindowRegistry: OwnedWindowRegistry
     @ObservationIgnored
     var warpMouseCursorPosition: (CGPoint) -> Void = { CGWarpMouseCursorPosition($0) }
     @ObservationIgnored
@@ -204,6 +207,7 @@ final class WMController {
 
     let animationClock = AnimationClock()
     let motionPolicy: MotionPolicy
+    let diagnosticsDirectory: URL
     private let clipboardHistoryDirectory: URL
     private let windowFocusOperations: WindowFocusOperations
     weak var statusBarController: StatusBarController?
@@ -212,6 +216,7 @@ final class WMController {
         settings: SettingsStore,
         hiddenBarController: HiddenBarController? = nil,
         clipboardHistoryDirectory: URL = OmniWMStoragePaths.live.stateDirectory,
+        diagnosticsDirectory: URL = OmniWMStoragePaths.live.diagnosticsDirectory,
         windowFocusOperations: WindowFocusOperations = .live,
         ownedWindowRegistry: OwnedWindowRegistry = .shared
     ) {
@@ -219,6 +224,8 @@ final class WMController {
         motionPolicy = MotionPolicy(animationsEnabled: settings.animationsEnabled)
         self.hiddenBarController = hiddenBarController ?? HiddenBarController(settings: settings)
         self.clipboardHistoryDirectory = clipboardHistoryDirectory
+        self.diagnosticsDirectory = diagnosticsDirectory
+        traceCaptureCoordinator = RuntimeTraceCaptureCoordinator(diagnosticsDirectory: diagnosticsDirectory)
         self.windowFocusOperations = windowFocusOperations
         self.ownedWindowRegistry = ownedWindowRegistry
         workspaceManager = WorkspaceManager(settings: settings)
@@ -232,6 +239,9 @@ final class WMController {
             if !eventIntake.enqueue(.hotkeyCommand(command)) {
                 _ = commandHandler.handleHotkeyCommand(command)
             }
+        }
+        traceCaptureCoordinator.onStateChange = { [weak self] in
+            self?.statusBarController?.handleTraceCaptureStateChange()
         }
         tabbedOverlayManager.onSelect = { [weak self] info, visualIndex, token in
             self?.layoutRefreshController.selectTabInNiri(
@@ -269,7 +279,7 @@ final class WMController {
         }
     }
 
-    func applyPersistedSettings(_ settings: SettingsStore) {
+    func applyPersistedSettings(_ settings: SettingsStore, startServices: Bool = true) {
         setAnimationsEnabled(settings.animationsEnabled, persist: false)
         applyCurrentAppearanceMode()
 
@@ -336,7 +346,9 @@ final class WMController {
         updateWorkspaceBarSettings()
         _ = syncMouseWarpPolicy()
 
-        setEnabled(true)
+        if startServices {
+            setEnabled(true)
+        }
         refreshStatusBar()
     }
 
@@ -1143,7 +1155,7 @@ final class WMController {
         if let createdWorkspaceId = workspaceManager.workspaceId(for: "1", createIfMissing: false) {
             return createdWorkspaceId
         }
-        fatalError("resolveWorkspaceForNewWindow: no workspaces exist")
+        fatal("resolveWorkspaceForNewWindow: no workspaces exist")
     }
 
     private func createPlacementTarget(
@@ -1324,25 +1336,6 @@ final class WMController {
         let resolved = AXWindowService.sizeConstraints(axRef, currentSize: currentSize)
         workspaceManager.setCachedConstraints(resolved, for: token)
         return resolved
-    }
-
-    private func decisionApplyingManualOverride(
-        _ decision: WindowDecision,
-        manualOverride: ManualWindowOverride?
-    ) -> WindowDecision {
-        guard let manualOverride, decision.disposition != .unmanaged else {
-            return decision
-        }
-
-        return WindowDecision(
-            disposition: manualOverride == .forceTile ? .managed : .floating,
-            source: .manualOverride,
-            layoutDecisionKind: .explicitLayout,
-            workspaceName: decision.workspaceName,
-            ruleEffects: decision.ruleEffects,
-            heuristicReasons: [],
-            deferredReason: nil
-        )
     }
 
     private func liveFrame(for entry: WindowState) -> CGRect? {
@@ -1956,7 +1949,7 @@ final class WMController {
             appFullscreen: fullscreen
         )
         let decision = applyingManualOverride
-            ? decisionApplyingManualOverride(baseDecision, manualOverride: manualOverride)
+            ? WindowRuleEngine.applyingManualOverride(baseDecision, manualOverride: manualOverride)
             : baseDecision
         return WindowDecisionEvaluation(
             token: token,
@@ -2794,8 +2787,12 @@ final class WMController {
 
         let center = frame.center
 
-        guard NSScreen.screens.contains(where: { $0.frame.contains(center) }) else { return }
+        guard NSScreen.screens.contains(where: { $0.frame.contains(center) }) else {
+            MouseTrace.record("focus-warp suppressed (off-screen) token=\(token) center=\(TraceFormat.point(center))")
+            return
+        }
 
+        MouseTrace.record("focus-warp token=\(token) center=\(TraceFormat.point(center))")
         warpMouseCursorPosition(ScreenCoordinateSpace.toWindowServer(point: center))
     }
 

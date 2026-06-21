@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-06-23T00:00:00Z",
+  "os": "fixture",
+  "appVersion": "fixture",
+  "ax": {
+    "window": { "attributes": {}, "writable": [], "failed": [], "ignored": [] },
+    "app": { "attributes": {}, "writable": [], "failed": [], "ignored": [] }
+  },
+  "omniwm": {
+    "tokenPid": 1000,
+    "tokenWindowId": 2,
+    "appName": "Mini Player",
+    "bundleId": "com.example.accessory",
+    "input": {
+      "appName": "Mini Player",
+      "ax": {
+        "role": "AXWindow",
+        "subrole": "AXStandardWindow",
+        "title": "Now Playing",
+        "hasCloseButton": false,
+        "hasFullscreenButton": false,
+        "hasZoomButton": false,
+        "hasMinimizeButton": false,
+        "appPolicy": "accessory",
+        "bundleId": "com.example.accessory",
+        "attributeFetchSucceeded": true
+      },
+      "appFullscreen": false,
+      "rules": []
+    },
+    "expected": {
+      "disposition": "floating",
+      "source": "heuristic",
+      "heuristicReasons": ["accessoryWithoutClose"],
+      "layoutDecisionKind": "fallbackLayout"
+    }
+  }
+}

@@ -251,50 +251,6 @@ final class IPCQueryRouter {
         )
     }
 
-    func focusedWindowDecisionResult() -> IPCFocusedWindowDecisionQueryResult {
-        guard let snapshot = controller.focusedWindowDecisionDebugSnapshot() else {
-            return IPCFocusedWindowDecisionQueryResult(window: nil)
-        }
-
-        let id = snapshot.token.map(windowIdentifier)
-        let workspaceRef = snapshot.workspaceName
-            .flatMap { controller.workspaceManager.workspaceId(for: $0, createIfMissing: false) }
-            .flatMap { controller.workspaceManager.descriptor(for: $0) }
-            .map(workspaceRef(from:))
-        return IPCFocusedWindowDecisionQueryResult(
-            window: IPCFocusedWindowDecisionSnapshot(
-                id: id,
-                app: appRef(name: snapshot.appName, bundleId: snapshot.bundleId),
-                title: snapshot.title,
-                axRole: snapshot.axRole,
-                axSubrole: snapshot.axSubrole,
-                appFullscreen: snapshot.appFullscreen,
-                manualOverride: snapshot.manualOverride.map(ipcManualOverride(from:)),
-                disposition: ipcWindowDecisionDisposition(from: snapshot.disposition),
-                source: snapshot.sourceDescription,
-                layoutDecisionKind: ipcWindowDecisionLayoutKind(from: snapshot.layoutDecisionKind),
-                deferredReason: snapshot.deferredReason.map(ipcWindowDecisionDeferredReason(from:)),
-                admissionOutcome: ipcWindowDecisionAdmissionOutcome(from: snapshot.admissionOutcome),
-                workspace: workspaceRef,
-                minWidth: snapshot.minWidth,
-                minHeight: snapshot.minHeight,
-                matchedRuleId: snapshot.matchedRuleId?.uuidString,
-                heuristicReasons: snapshot.heuristicReasons.map(\.rawValue),
-                attributeFetchSucceeded: snapshot.attributeFetchSucceeded
-            )
-        )
-    }
-
-    func reconcileDebugResult(traceLimit: Int = 50) -> IPCReconcileDebugQueryResult {
-        IPCReconcileDebugQueryResult(
-            snapshot: controller.workspaceManager.reconcileSnapshotDump(),
-            trace: controller.workspaceManager.reconcileTraceDump(limit: traceLimit),
-            metrics: controller.layoutRefreshController.layoutBuildMetricsDump()
-                + "\ninvariants: " + controller.workspaceManager.invariantViolationCountsDump(),
-            traceLimit: traceLimit
-        )
-    }
-
     private func workspaceBarWorkspace(from item: WorkspaceBarItem) -> IPCWorkspaceBarWorkspace {
         IPCWorkspaceBarWorkspace(
             id: workspaceIdentifier(item.id),
@@ -720,58 +676,6 @@ final class IPCQueryRouter {
             .horizontal
         case .vertical:
             .vertical
-        }
-    }
-
-    private func ipcWindowDecisionDisposition(from disposition: WindowDecisionDisposition)
-        -> IPCWindowDecisionDisposition
-    {
-        switch disposition {
-        case .managed:
-            .managed
-        case .floating:
-            .floating
-        case .unmanaged:
-            .unmanaged
-        case .undecided:
-            .undecided
-        }
-    }
-
-    private func ipcWindowDecisionLayoutKind(
-        from kind: WindowDecisionLayoutKind
-    ) -> IPCWindowDecisionLayoutKind {
-        switch kind {
-        case .explicitLayout:
-            .explicitLayout
-        case .fallbackLayout:
-            .fallbackLayout
-        }
-    }
-
-    private func ipcWindowDecisionDeferredReason(
-        from reason: WindowDecisionDeferredReason
-    ) -> IPCWindowDecisionDeferredReason {
-        switch reason {
-        case .attributeFetchFailed:
-            .attributeFetchFailed
-        case .requiredTitleMissing:
-            .requiredTitleMissing
-        }
-    }
-
-    private func ipcWindowDecisionAdmissionOutcome(
-        from outcome: WindowDecisionAdmissionOutcome
-    ) -> IPCWindowDecisionAdmissionOutcome {
-        switch outcome {
-        case .trackedTiling:
-            .trackedTiling
-        case .trackedFloating:
-            .trackedFloating
-        case .ignored:
-            .ignored
-        case .deferred:
-            .deferred
         }
     }
 }

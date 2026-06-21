@@ -226,6 +226,48 @@ final class HotkeyCenter {
         hyperTrigger.isActive
     }
 
+    func hotkeyHealthFacts() -> HotkeyHealthFacts {
+        HotkeyHealthFacts(
+            isRunning: isRunning,
+            isHyperTriggerActive: hyperTrigger.isActive,
+            hyperTriggerTapInstalled: hyperTriggerTap != nil,
+            capsLockHyperRemapActive: capsLockHyperRemapActive,
+            systemHyperTriggerEnabled: configuration.systemHyperTrigger.isEnabled,
+            systemHyperTriggerName: configuration.systemHyperTrigger.humanReadableString,
+            systemHyperTriggerFailure: systemHyperTriggerFailure.map { "\($0)" },
+            suppressedHotkeyCount: suppressedHotkeyKeyCodes.count,
+            registrationFailureCount: registrationFailures.count,
+            sideSpecificCount: sideSpecificDispatch.count,
+            bindingCount: configuration.bindings.count,
+            bindings: Self.bindingFacts(for: configuration.bindings)
+        )
+    }
+
+    nonisolated static func bindingFacts(for bindings: [HotkeyBinding]) -> [HotkeyBindingFact] {
+        let failures = registrationPlan(for: bindings).failures
+        return bindings.compactMap { binding in
+            guard case let .chord(chord) = binding.binding, !chord.isUnassigned else { return nil }
+            let route: String
+            if let reason = failures[binding.command] {
+                route = "unregistered(\(reason))"
+            } else if chord.sidedModifiers.isEmpty {
+                route = "carbon"
+            } else {
+                route = "sided"
+            }
+            return HotkeyBindingFact(command: binding.command.displayName, display: chord.displayString, route: route)
+        }
+    }
+
+    static func decisionLabel(_ decision: HyperTriggerStateMachine.Decision) -> String {
+        switch decision {
+        case .suppress: "suppress"
+        case .passThrough: "passThrough"
+        case .inject: "inject"
+        case .toggleCapsLock: "toggleCapsLock"
+        }
+    }
+
     deinit {
         MainActor.assumeIsolated {
             stopHyperTriggerTap()
@@ -260,6 +302,7 @@ final class HotkeyCenter {
         InstallEventHandler(GetApplicationEventTarget(), callback, 1, &eventSpec, selfPtr, &handler)
 
         refreshCommandHotkeyRegistrations()
+        DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.start")
     }
 
     func stop() {
@@ -272,6 +315,7 @@ final class HotkeyCenter {
             RemoveEventHandler(handler)
             self.handler = nil
         }
+        DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.stop")
     }
 
     func setCommandHotkeysSuspended(_ suspended: Bool) {
@@ -323,13 +367,17 @@ final class HotkeyCenter {
                 )
             } else {
                 systemHyperTriggerFailure = .capsLockRemapUnavailable
+                DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.capsLockRemap.failed")
             }
         }
 
-        if !setupHyperTriggerTapIfNeeded() {
+        if setupHyperTriggerTapIfNeeded() {
+            DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.hyperTap.installed")
+        } else {
             if hyperEnabled {
                 systemHyperTriggerFailure = .eventTapUnavailable
             }
+            DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.hyperTap.failed")
             restoreCapsLockHyperRemap()
             hyperTrigger = HyperTriggerStateMachine(trigger: .none, capsLockRemapped: false)
         }
@@ -343,6 +391,7 @@ final class HotkeyCenter {
         guard !commandHotkeysSuspended else {
             sideSpecificDispatch = []
             reconcileEventTap()
+            DiagnosticsEventRecorder.shared.recordLifecycle(name: "hotkeys.suspended")
             return
         }
 
@@ -380,10 +429,15 @@ final class HotkeyCenter {
             }
             sideSpecificDispatch = []
         }
+        DiagnosticsEventRecorder.shared.recordLifecycle(
+            name: "hotkeys.registered registered=\(refs.count) "
+                + "failures=\(registrationFailures.count) sided=\(sideSpecificDispatch.count)"
+        )
     }
 
     private func dispatch(id: UInt32) {
         guard let command = idToCommand[id] else { return }
+        InputTrace.record("hotkey.carbon cmd=\(command.displayName)")
         onCommand?(command)
     }
 
@@ -452,6 +506,7 @@ final class HotkeyCenter {
     private func handleHyperTriggerEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         switch type {
         case .tapDisabledByTimeout:
+            InputTapHealth.recordTapDisabled(mouse: false, byTimeout: true)
             if let tap = hyperTriggerTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
@@ -459,6 +514,7 @@ final class HotkeyCenter {
             suppressedHotkeyKeyCodes.removeAll()
             return Unmanaged.passUnretained(event)
         case .tapDisabledByUserInput:
+            InputTapHealth.recordTapDisabled(mouse: false, byTimeout: false)
             hyperTrigger.reset()
             suppressedHotkeyKeyCodes.removeAll()
             return Unmanaged.passUnretained(event)
@@ -480,7 +536,9 @@ final class HotkeyCenter {
         let timestamp = TimeInterval(event.timestamp) / 1_000_000_000
         switch type {
         case .keyDown:
-            switch hyperTrigger.handleKeyDown(keyCode, timestamp: timestamp) {
+            let decision = hyperTrigger.handleKeyDown(keyCode, timestamp: timestamp)
+            recordHyperDecision("keyDown", decision)
+            switch decision {
             case .suppress:
                 return nil
             case .toggleCapsLock:
@@ -494,15 +552,7 @@ final class HotkeyCenter {
             if suppressedHotkeyKeyCodes.contains(keyCode) {
                 return nil
             }
-            if event.getIntegerValueField(.keyboardEventAutorepeat) == 0,
-               let command = CommandHotkeyTapMatcher.match(
-                   keyCode: keyCode,
-                   rawFlags: event.flags.rawValue,
-                   entries: sideSpecificDispatch
-               )
-            {
-                suppressedHotkeyKeyCodes.insert(keyCode)
-                onCommand?(command)
+            if dispatchSideSpecificHotkey(keyCode: keyCode, event: event) {
                 return nil
             }
             return Unmanaged.passUnretained(event)
@@ -543,6 +593,7 @@ final class HotkeyCenter {
         _ decision: HyperTriggerStateMachine.Decision,
         to event: CGEvent
     ) -> Unmanaged<CGEvent>? {
+        recordHyperDecision("apply", decision)
         switch decision {
         case .suppress:
             return nil
@@ -559,6 +610,45 @@ final class HotkeyCenter {
 
     private func injectHyperFlags(into event: CGEvent) {
         event.flags = CGEventFlags(rawValue: event.flags.rawValue | Self.hyperFlagMask)
+    }
+
+    private func recordHyperDecision(_ phase: String, _ decision: HyperTriggerStateMachine.Decision) {
+        guard decision != .passThrough else { return }
+        InputTrace.record("hyper \(phase) decision=\(Self.decisionLabel(decision))")
+    }
+
+    private func dispatchSideSpecificHotkey(keyCode: UInt32, event: CGEvent) -> Bool {
+        guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return false }
+        let rawFlags = event.flags.rawValue
+        if let command = CommandHotkeyTapMatcher.match(
+            keyCode: keyCode,
+            rawFlags: rawFlags,
+            entries: sideSpecificDispatch
+        ) {
+            suppressedHotkeyKeyCodes.insert(keyCode)
+            InputTrace.record("hotkey.sided cmd=\(command.displayName)")
+            onCommand?(command)
+            return true
+        }
+        recordSidedMiss(keyCode: keyCode, rawFlags: rawFlags)
+        return false
+    }
+
+    private func recordSidedMiss(keyCode: UInt32, rawFlags: UInt64) {
+        guard InputTrace.shared.isActive, !sideSpecificDispatch.isEmpty else { return }
+        let down = KeySymbolMapper.sidedModifierLabel(rawFlags)
+        guard !down.isEmpty else { return }
+        let nearMiss = CommandHotkeyTapMatcher.nearMiss(
+            keyCode: keyCode,
+            rawFlags: rawFlags,
+            entries: sideSpecificDispatch
+        )
+        InputTrace.record(
+            "hotkey.sided.miss key=\(KeySymbolMapper.keySymbol(keyCode)) down=\(down) "
+                + "closest=\(nearMiss?.entry.command.displayName ?? "none") "
+                + "needs=\(nearMiss?.entry.binding.displayString ?? "-") "
+                + "reason=\(nearMiss?.reason ?? "-")"
+        )
     }
 
     nonisolated static func eventTapAccessGranted() -> Bool {

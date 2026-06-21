@@ -499,6 +499,50 @@ final class HotkeyChordTests: XCTestCase {
         )
     }
 
+    func testRejectionReasonAgreesWithMatchesAcrossCases() {
+        let either = KeyBinding(keyCode: UInt32(kVK_ANSI_1), modifiers: UInt32(optionKey))
+        let bindings = [either, either.settingSide(.left), either.settingSide(.right)]
+        let leftFlags = CGEventFlags.maskAlternate.rawValue | UInt64(NX_DEVICELALTKEYMASK)
+        let rightFlags = CGEventFlags.maskAlternate.rawValue | UInt64(NX_DEVICERALTKEYMASK)
+        let leftWithShift = leftFlags | CGEventFlags.maskShift.rawValue | UInt64(NX_DEVICELSHIFTKEYMASK)
+        let flagSets: [UInt64] = [0, leftFlags, rightFlags, leftWithShift]
+
+        for binding in bindings {
+            for keyCode in [UInt32(kVK_ANSI_1), UInt32(kVK_ANSI_2)] {
+                for flags in flagSets {
+                    let matched = CommandHotkeyTapMatcher.matches(binding, keyCode: keyCode, rawFlags: flags)
+                    let reason = CommandHotkeyTapMatcher.rejectionReason(binding, keyCode: keyCode, rawFlags: flags)
+                    XCTAssertEqual(
+                        matched,
+                        reason == nil,
+                        "binding=\(binding.displayString) key=\(keyCode) flags=\(flags)"
+                    )
+                }
+            }
+        }
+    }
+
+    func testNearMissReportsClosestSidedBindingAndReason() {
+        let leftHyper = KeyBinding(
+            keyCode: UInt32(kVK_ANSI_1),
+            modifiers: KeySymbolMapper.hyperModifiers,
+            sidedModifiers: SidedModifiers(left: KeySymbolMapper.hyperModifiers)
+        )
+        let entries = [CommandHotkeyTapMatcher.Entry(binding: leftHyper, command: .focusPrevious)]
+        let onlyLeftControl = CGEventFlags.maskControl.rawValue | UInt64(NX_DEVICELCTLKEYMASK)
+
+        XCTAssertNil(
+            CommandHotkeyTapMatcher.match(keyCode: UInt32(kVK_ANSI_1), rawFlags: onlyLeftControl, entries: entries)
+        )
+        let nearMiss = CommandHotkeyTapMatcher.nearMiss(
+            keyCode: UInt32(kVK_ANSI_1),
+            rawFlags: onlyLeftControl,
+            entries: entries
+        )
+        XCTAssertEqual(nearMiss?.entry.command, .focusPrevious)
+        XCTAssertEqual(nearMiss?.reason, "needs ⌥")
+    }
+
     func testSettingSidePinsAndClearsUniformly() {
         let base = KeyBinding(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(optionKey | shiftKey))
 

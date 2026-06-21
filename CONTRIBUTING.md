@@ -38,6 +38,10 @@ Bug fixes, documentation improvements, performance work, focused cleanups, featu
 3. Make the change and verify it.
 4. Open a pull request with clear context and reasoning.
 
+## Improving the AI Issue-Report Prompt
+
+The prompt that rewrites bug reports into GitHub issues lives in plain Markdown, so you can improve it without editing Swift. See [docs/issue-report-prompt.md](docs/issue-report-prompt.md) for the files to edit, the constraints to preserve, and how to test.
+
 ## Questions and Ideas
 
 If you are unsure about something, open an issue or ask in the pull request. Thoughtful questions are always welcome.

@@ -416,14 +416,6 @@ public enum IPCAutomationManifest {
         IPCQueryDescriptor(
             name: .capabilities,
             summary: "Return protocol, command, query, selector, and subscription capabilities."
-        ),
-        IPCQueryDescriptor(
-            name: .focusedWindowDecision,
-            summary: "Return the focused window rule/debug decision snapshot."
-        ),
-        IPCQueryDescriptor(
-            name: .reconcileDebug,
-            summary: "Return the reconcile snapshot and recent trace for debugging."
         )
     ]
 

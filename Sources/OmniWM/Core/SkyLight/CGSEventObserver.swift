@@ -131,6 +131,7 @@ private func handleRawCGSEvent(
          .malformed:
         return
     case let .event(event):
+        DiagnosticsEventRecorder.shared.recordCGS(event)
         EventIntake.post(.cgs(event))
     }
 }

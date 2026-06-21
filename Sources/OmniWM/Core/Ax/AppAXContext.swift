@@ -804,12 +804,21 @@ private func axWindowNotificationCallback(
     _ refcon: UnsafeMutableRawPointer?
 ) {
     let notificationName = notification as String
+
+    var pid: pid_t = 0
+    let pidStatus = AXUIElementGetPid(element, &pid)
+    RawAXNotificationTrace.record(
+        name: notificationName,
+        pid: pid,
+        windowId: refcon.map { Int(bitPattern: $0) }
+    )
+
     let isDestroyed = notificationName == (kAXUIElementDestroyedNotification as String)
     let isMiniaturized = notificationName == (kAXWindowMiniaturizedNotification as String)
     guard isDestroyed || isMiniaturized else { return }
+    guard pidStatus == .success else { return }
 
-    var pid: pid_t = 0
-    guard AXUIElementGetPid(element, &pid) == .success else { return }
+    DiagnosticsEventRecorder.shared.recordLifecycle(name: notificationName, pid: pid)
 
     if isDestroyed {
         AppAXContext.handleWindowDestroyedCallback(pid: pid, refcon: refcon)
@@ -828,6 +837,9 @@ private func axFocusedWindowChangedCallback(
 
     var pid: pid_t = 0
     guard AXUIElementGetPid(element, &pid) == .success else { return }
+
+    RawAXNotificationTrace.record(name: kAXFocusedWindowChangedNotification as String, pid: pid, windowId: nil)
+    DiagnosticsEventRecorder.shared.recordLifecycle(name: kAXFocusedWindowChangedNotification as String, pid: pid)
 
     EventIntake.post(.axFocusedWindowChanged(pid: pid))
 }

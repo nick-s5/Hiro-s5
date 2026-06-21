@@ -338,6 +338,24 @@ final class WindowRuleEngine {
             || builtInRules.contains { $0.requiresDynamicReevaluation }
     }
 
+    static func applyingManualOverride(
+        _ decision: WindowDecision,
+        manualOverride: ManualWindowOverride?
+    ) -> WindowDecision {
+        guard let manualOverride, decision.disposition != .unmanaged else {
+            return decision
+        }
+        return WindowDecision(
+            disposition: manualOverride == .forceTile ? .managed : .floating,
+            source: .manualOverride,
+            layoutDecisionKind: .explicitLayout,
+            workspaceName: decision.workspaceName,
+            ruleEffects: decision.ruleEffects,
+            heuristicReasons: [],
+            deferredReason: nil
+        )
+    }
+
     func decision(
         for facts: WindowRuleFacts,
         token: WindowToken?,

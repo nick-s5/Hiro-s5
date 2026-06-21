@@ -132,6 +132,7 @@ final class MouseEventHandler {
 
         let callback: CGEventTapCallBack = { _, type, event, _ in
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                InputTapHealth.recordTapDisabled(mouse: true, byTimeout: type == .tapDisabledByTimeout)
                 if let tap = MouseEventHandler._instance?.state.eventTap {
                     CGEvent.tapEnable(tap: tap, enable: true)
                 }
@@ -159,6 +160,9 @@ final class MouseEventHandler {
             }
             CGEvent.tapEnable(tap: tap, enable: true)
         }
+        DiagnosticsEventRecorder.shared.recordLifecycle(
+            name: state.eventTap != nil ? "mouse.tap.installed" : "mouse.tap.failed"
+        )
 
         let source = MultitouchGestureSource()
         source.onSnapshot = { [weak self] snapshot in
@@ -180,6 +184,7 @@ final class MouseEventHandler {
         multitouchSource?.stop()
         multitouchSource = nil
         MouseEventHandler._instance = nil
+        DiagnosticsEventRecorder.shared.recordLifecycle(name: "mouse.tap.removed")
         state.currentHoveredEdges = []
         state.isResizing = false
         state.activeInteractionButton = nil
@@ -212,7 +217,16 @@ final class MouseEventHandler {
     ) -> Bool {
         guard !isInputSuppressed else { return false }
         guard controller != nil else { return false }
-        if shouldBlockOwnWindowInput(at: location) {
+        let blocked = shouldBlockOwnWindowInput(at: location)
+        if MouseTrace.shared.isActive {
+            let geometric = controller?.ownedWindowRegistry.containsGeometric(point: location) ?? false
+            MouseTrace.record(
+                "tap: down \(button == .right ? "R" : "L") loc=\(TraceFormat.point(location)) "
+                    + "ownGeom=\(geometric) ownInteractive=\(blocked) "
+                    + "decision=\(blocked ? "yieldToOwned" : "handledByWM")"
+            )
+        }
+        if blocked {
             return false
         }
         return handleMouseDownFromTap(at: location, modifiers: modifiers, button: button)
@@ -318,6 +332,9 @@ final class MouseEventHandler {
             phase: phase,
             modifiers: modifiers
         )
+        if suppress, MouseTrace.shared.isActive {
+            MouseTrace.record("tap: scroll suppressed loc=\(TraceFormat.point(location))")
+        }
         EventIntake.post(
             .mouseScroll(
                 MouseScrollIntake(

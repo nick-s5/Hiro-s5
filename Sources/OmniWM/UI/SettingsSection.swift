@@ -5,6 +5,7 @@ import SwiftUI
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general
+    case diagnostics
     case niri
     case dwindle
     case monitors
@@ -13,6 +14,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case bar
     case hotkeys
     case quakeTerminal
+    case reportIssue
 
     var id: String {
         rawValue
@@ -21,6 +23,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .general: "General"
+        case .diagnostics: "Troubleshooting"
         case .niri: "Niri Layout"
         case .dwindle: "Dwindle Layout"
         case .monitors: "Monitors"
@@ -29,12 +32,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .bar: "Workspace Bar"
         case .hotkeys: "Hotkeys"
         case .quakeTerminal: "Quake Terminal"
+        case .reportIssue: "Report an Issue"
         }
     }
 
     var icon: String {
         switch self {
         case .general: "gearshape"
+        case .diagnostics: "stethoscope"
         case .niri: "scroll"
         case .dwindle: "square.split.2x2"
         case .monitors: "display"
@@ -43,6 +48,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .bar: "menubar.rectangle"
         case .hotkeys: "keyboard"
         case .quakeTerminal: "terminal"
+        case .reportIssue: "ladybug"
         }
     }
 }
@@ -52,6 +58,7 @@ enum SettingsSectionGroup: String, CaseIterable, Identifiable {
     case layouts = "Layouts"
     case workspace = "Workspace"
     case input = "Input"
+    case help = "Help"
 
     var id: String {
         rawValue
@@ -67,6 +74,8 @@ enum SettingsSectionGroup: String, CaseIterable, Identifiable {
             [.workspaces, .borders, .bar]
         case .input:
             [.hotkeys, .quakeTerminal]
+        case .help:
+            [.reportIssue, .diagnostics]
         }
     }
 }

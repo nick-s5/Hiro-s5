@@ -17,12 +17,11 @@ struct ReconcileTraceRecord: Equatable {
 final class ReconcileTraceRecorder {
     private static let defaultLimit = 256
 
-    private let limit: Int
     private var nextSequence: UInt64 = 1
-    private var records: [ReconcileTraceRecord] = []
+    private var records: RingBuffer<ReconcileTraceRecord>
 
     init(limit: Int = defaultLimit) {
-        self.limit = max(1, limit)
+        records = RingBuffer(capacity: limit)
     }
 
     func append(
@@ -43,9 +42,6 @@ final class ReconcileTraceRecorder {
             invariantViolations: invariantViolations
         )
         nextSequence += 1
-        if records.count == limit {
-            records.removeFirst()
-        }
         records.append(record)
     }
 
@@ -61,11 +57,11 @@ final class ReconcileTraceRecorder {
     }
 
     func snapshot() -> [ReconcileTraceRecord] {
-        records
+        records.snapshot()
     }
 
     func reset() {
-        records.removeAll(keepingCapacity: true)
+        records.removeAll()
         nextSequence = 1
     }
 }

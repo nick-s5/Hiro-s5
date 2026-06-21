@@ -71,6 +71,14 @@ final class SurfaceCoordinator {
         scene.containsInteractive(point: point)
     }
 
+    func containsGeometric(point: CGPoint) -> Bool {
+        scene.containsGeometric(point: point)
+    }
+
+    func visibleSurfaceInfos() -> [SurfaceScene.VisibleSurfaceInfo] {
+        scene.visibleSurfaceInfos()
+    }
+
     var hasFrontmostSuppressingWindow: Bool {
         scene.hasFrontmostSuppressingWindow
     }

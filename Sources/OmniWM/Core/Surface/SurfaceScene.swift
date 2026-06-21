@@ -258,4 +258,34 @@ final class SurfaceScene {
         }
         return node.window?.frame
     }
+
+    struct VisibleSurfaceInfo {
+        let id: String
+        let kind: SurfaceKind
+        let hitTestPolicy: HitTestPolicy
+        let capturePolicy: CapturePolicy
+        let suppressesManagedFocusRecovery: Bool
+        let frame: CGRect?
+        let window: NSWindow?
+    }
+
+    func visibleSurfaceInfos() -> [VisibleSurfaceInfo] {
+        visibleNodes.map { node in
+            VisibleSurfaceInfo(
+                id: node.id,
+                kind: node.policy.kind,
+                hitTestPolicy: node.policy.hitTestPolicy,
+                capturePolicy: node.policy.capturePolicy,
+                suppressesManagedFocusRecovery: node.policy.suppressesManagedFocusRecovery,
+                frame: resolvedFrame(for: node),
+                window: node.window
+            )
+        }
+    }
+
+    func containsGeometric(point: CGPoint) -> Bool {
+        visibleNodes.contains { node in
+            node.policy.hitTestPolicy != .passthrough && resolvedFrame(for: node)?.contains(point) == true
+        }
+    }
 }

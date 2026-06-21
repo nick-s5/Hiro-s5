@@ -1,0 +1,356 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 BarutSRB — https://github.com/BarutSRB/OmniWM
+
+import AppKit
+import Foundation
+import SwiftUI
+
+enum DiagnosticsActionStatus: Equatable {
+    case idle
+    case success(String)
+    case failure(String)
+}
+
+struct DiagnosticsSettingsTab: View {
+    @Bindable var controller: WMController
+    let navigation: SettingsNavigationModel
+
+    @State private var traceStatus: DiagnosticsActionStatus = .idle
+    @State private var recoveryStatus: DiagnosticsActionStatus = .idle
+    @State private var recentFiles: [DiagnosticsFile] = []
+    @State private var reloadToken = 0
+
+    private var directory: URL {
+        OmniWMStoragePaths.live.diagnosticsDirectory
+    }
+
+    var body: some View {
+        Form {
+            crashBannerSection
+            healthSection
+            recordingSection
+            savedDiagnosticsSection
+            windowSnapshotSection
+        }
+        .formStyle(.grouped)
+        .task(id: reloadToken) {
+            let directory = directory
+            recentFiles = await Task.detached { DiagnosticsFileScanner.scan(directory) }.value
+            controller.refreshDiagnosticsIssues()
+        }
+        .onChange(of: controller.traceCaptureStatus.lastArtifact) { _, artifact in
+            guard let artifact else { return }
+            NSWorkspace.shared.activateFileViewerSelecting([artifact.url])
+            traceStatus = .success("Recording saved \(artifact.url.lastPathComponent)")
+            reloadToken += 1
+        }
+    }
+
+    @ViewBuilder
+    private var crashBannerSection: some View {
+        if let crash = controller.pendingCrashReport {
+            Section {
+                LabeledContent {
+                    Button("Report Crash…") {
+                        navigation.section = .reportIssue
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } label: {
+                    Label("OmniWM recovered from a crash", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                Text(crash.reason)
+                    .font(.callout)
+                SettingsCaption("Report it to open a pre-filled issue with the crash details.")
+                HStack(spacing: 8) {
+                    Button("Copy File") {
+                        copyFile(crash.url)
+                    }
+                    .accessibilityLabel("Copy crash log file")
+                    Button("Reveal") {
+                        NSWorkspace.shared.activateFileViewerSelecting([crash.url])
+                    }
+                    .accessibilityLabel("Reveal crash log in Finder")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var healthSection: some View {
+        Section("Health") {
+            if controller.diagnosticsIssues.isEmpty {
+                Label("No issues detected", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                ForEach(controller.diagnosticsIssues) { issue in
+                    issueRow(issue)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func issueRow(_ issue: DiagnosticsIssue) -> some View {
+        let isCritical = issue.severity == .critical
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent {
+                HStack(spacing: 8) {
+                    if let urlString = issue.systemSettingsURLString {
+                        Button("Open Settings") {
+                            openSystemSettings(urlString)
+                        }
+                        .accessibilityLabel("Open System Settings for \(issue.title)")
+                    }
+                    if issue.revealsConfigFolder {
+                        Button("Reveal Config Folder") {
+                            revealConfigFolder()
+                        }
+                        .accessibilityLabel("Reveal config folder for \(issue.title)")
+                    }
+                }
+                .controlSize(.small)
+            } label: {
+                Label(issue.title, systemImage: isCritical ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(isCritical ? .red : .orange)
+            }
+            Text(issue.message)
+                .font(.callout)
+            SettingsCaption(issue.remediation)
+        }
+    }
+
+    @ViewBuilder
+    private var recordingSection: some View {
+        Section("Record a Problem") {
+            if controller.isTraceCaptureActive {
+                recordingProgressLabel
+                Button("Stop & Save Recording") {
+                    stopRecording()
+                }
+            } else {
+                Button("Start Recording") {
+                    startRecording()
+                }
+            }
+            statusLabel(traceStatus)
+            SettingsCaption(
+                "Records window-server activity until you stop, then saves a trace log. "
+                    + "Use it to capture a problem you can reproduce."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var recordingProgressLabel: some View {
+        if let startedAt = controller.traceCaptureStatus.startedAt {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let elapsed = elapsed(since: startedAt, now: context.date)
+                HStack(spacing: 8) {
+                    Image(systemName: "record.circle")
+                        .foregroundStyle(.red)
+                    Text("Recording \(elapsed)")
+                        .font(.callout.monospacedDigit())
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Recording in progress")
+                .accessibilityValue(elapsed)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var savedDiagnosticsSection: some View {
+        Section("Saved Diagnostics") {
+            if recentFiles.isEmpty {
+                Text("No diagnostics files yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(recentFiles.prefix(10)) { file in
+                    savedDiagnosticRow(file)
+                }
+            }
+            HStack {
+                Button("Refresh") {
+                    reloadToken += 1
+                }
+                Button("Reveal Folder") {
+                    revealFolder()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func savedDiagnosticRow(_ file: DiagnosticsFile) -> some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                Button("Copy Path") {
+                    copyToPasteboard(file.url.path)
+                }
+                .accessibilityLabel("Copy path for \(file.name)")
+                Button("Reveal") {
+                    NSWorkspace.shared.activateFileViewerSelecting([file.url])
+                }
+                .accessibilityLabel("Reveal \(file.name) in Finder")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+        } label: {
+            Text(artifactType(file))
+                .font(.callout)
+            Text(file.name)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("\(file.modified.formatted(date: .abbreviated, time: .shortened)) · \(byteCount(file.sizeBytes))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .contextMenu {
+            Button("Copy Path") {
+                copyToPasteboard(file.url.path)
+            }
+            Button("Copy File") {
+                copyFile(file.url)
+            }
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([file.url])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var windowSnapshotSection: some View {
+        Section("Window Snapshot") {
+            Button("Dump Focused Window AX") {
+                dumpFocusedWindow()
+            }
+            statusLabel(recoveryStatus)
+            SettingsCaption(
+                "Saves the focused window's accessibility details for a maintainer. Focus the misbehaving "
+                    + "window first — the file is added to your next diagnostics bundle."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func statusLabel(_ status: DiagnosticsActionStatus) -> some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case let .success(message):
+            Label(message, systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case let .failure(message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func dumpFocusedWindow() {
+        Task {
+            guard let dump = await controller.makeFocusedWindowDiagnosticDump() else {
+                recoveryStatus = .failure("No focused window to dump")
+                return
+            }
+            do {
+                let url = try controller.writeWindowDiagnosticDump(dump)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+                copyToPasteboard(url.path)
+                reportSuccess("Window AX dump saved \(url.lastPathComponent) — path copied", into: $recoveryStatus)
+                reloadToken += 1
+            } catch {
+                recoveryStatus = .failure("Failed to write window dump: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func startRecording() {
+        switch controller.toggleTraceCaptureForUI(desiredState: .active) {
+        case .started:
+            reportSuccess("Recording started", into: $traceStatus)
+        case .noChange:
+            traceStatus = .failure("A recording is already running")
+        case .stopped,
+             .writeFailed:
+            traceStatus = .failure("Unexpected recording state")
+        }
+    }
+
+    private func stopRecording() {
+        switch controller.toggleTraceCaptureForUI(desiredState: .inactive) {
+        case .stopped:
+            break
+        case let .writeFailed(reason):
+            traceStatus = .failure("Failed to write the recording: \(reason)")
+        case .noChange:
+            traceStatus = .failure("No recording is running")
+        case .started:
+            traceStatus = .failure("Unexpected recording state")
+        }
+    }
+
+    private func reportSuccess(_ message: String, into status: Binding<DiagnosticsActionStatus>) {
+        status.wrappedValue = .success(message)
+    }
+
+    private func revealFolder() {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(directory)
+    }
+
+    private func openSystemSettings(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func revealConfigFolder() {
+        let directory = SettingsFilePersistence.defaultDirectoryURL
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(directory)
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+    }
+
+    private func copyFile(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([url as NSURL])
+    }
+
+    private func artifactType(_ file: DiagnosticsFile) -> String {
+        let name = file.name
+        if name.hasPrefix("omniwm-trace-") {
+            return name.hasSuffix(".partial.log") ? "Trace (incomplete)" : "Trace"
+        }
+        if name.hasPrefix("omniwm-window-") {
+            return "Window AX"
+        }
+        if name.hasPrefix("omniwm-crash-") {
+            return "Crash"
+        }
+        if name.hasPrefix("omniwm-diagnostics-") {
+            return "Diagnostics"
+        }
+        if name.hasPrefix("omniwm-bundle-") {
+            return "Bundle"
+        }
+        return name
+    }
+
+    private func elapsed(since start: Date, now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func byteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}

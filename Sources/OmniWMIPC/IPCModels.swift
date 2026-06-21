@@ -4,7 +4,7 @@
 import Foundation
 
 public enum OmniWMIPCProtocol {
-    public static let version = 5
+    public static let version = 6
 }
 
 public struct IPCNoPayload: Codable, Equatable, Sendable {
@@ -139,30 +139,6 @@ public enum IPCRuleLayout: String, Codable, Equatable, Sendable {
 public enum IPCResizeOperation: String, Codable, Equatable, Sendable {
     case grow
     case shrink
-}
-
-public enum IPCWindowDecisionDisposition: String, Codable, Equatable, Sendable {
-    case managed
-    case floating
-    case unmanaged
-    case undecided
-}
-
-public enum IPCWindowDecisionLayoutKind: String, Codable, Equatable, Sendable {
-    case explicitLayout = "explicit-layout"
-    case fallbackLayout = "fallback-layout"
-}
-
-public enum IPCWindowDecisionDeferredReason: String, Codable, Equatable, Sendable {
-    case attributeFetchFailed = "attribute-fetch-failed"
-    case requiredTitleMissing = "required-title-missing"
-}
-
-public enum IPCWindowDecisionAdmissionOutcome: String, Codable, Equatable, Sendable {
-    case trackedTiling = "tracked-tiling"
-    case trackedFloating = "tracked-floating"
-    case ignored
-    case deferred
 }
 
 public struct IPCWorkspaceRef: Codable, Equatable, Sendable {
@@ -1294,8 +1270,6 @@ public enum IPCQueryName: String, Codable, CaseIterable, Equatable, Sendable {
     case commands
     case subscriptions
     case capabilities
-    case focusedWindowDecision = "focused-window-decision"
-    case reconcileDebug = "reconcile-debug"
 }
 
 public struct IPCQuerySelectors: Codable, Equatable, Sendable {
@@ -1927,8 +1901,6 @@ public enum IPCResultKind: String, Codable, Equatable, Sendable {
     case commands
     case subscriptions
     case capabilities
-    case focusedWindowDecision = "focused-window-decision"
-    case reconcileDebug = "reconcile-debug"
     case subscribed
 }
 
@@ -2483,89 +2455,6 @@ public struct IPCCapabilitiesQueryResult: Codable, Equatable, Sendable {
     }
 }
 
-public struct IPCFocusedWindowDecisionSnapshot: Codable, Equatable, Sendable {
-    public let id: String?
-    public let app: IPCAppRef?
-    public let title: String?
-    public let axRole: String?
-    public let axSubrole: String?
-    public let appFullscreen: Bool
-    public let manualOverride: IPCManualWindowOverride?
-    public let disposition: IPCWindowDecisionDisposition
-    public let source: String
-    public let layoutDecisionKind: IPCWindowDecisionLayoutKind
-    public let deferredReason: IPCWindowDecisionDeferredReason?
-    public let admissionOutcome: IPCWindowDecisionAdmissionOutcome
-    public let workspace: IPCWorkspaceRef?
-    public let minWidth: Double?
-    public let minHeight: Double?
-    public let matchedRuleId: String?
-    public let heuristicReasons: [String]
-    public let attributeFetchSucceeded: Bool
-
-    public init(
-        id: String?,
-        app: IPCAppRef?,
-        title: String?,
-        axRole: String?,
-        axSubrole: String?,
-        appFullscreen: Bool,
-        manualOverride: IPCManualWindowOverride?,
-        disposition: IPCWindowDecisionDisposition,
-        source: String,
-        layoutDecisionKind: IPCWindowDecisionLayoutKind,
-        deferredReason: IPCWindowDecisionDeferredReason?,
-        admissionOutcome: IPCWindowDecisionAdmissionOutcome,
-        workspace: IPCWorkspaceRef?,
-        minWidth: Double?,
-        minHeight: Double?,
-        matchedRuleId: String?,
-        heuristicReasons: [String],
-        attributeFetchSucceeded: Bool
-    ) {
-        self.id = id
-        self.app = app
-        self.title = title
-        self.axRole = axRole
-        self.axSubrole = axSubrole
-        self.appFullscreen = appFullscreen
-        self.manualOverride = manualOverride
-        self.disposition = disposition
-        self.source = source
-        self.layoutDecisionKind = layoutDecisionKind
-        self.deferredReason = deferredReason
-        self.admissionOutcome = admissionOutcome
-        self.workspace = workspace
-        self.minWidth = minWidth
-        self.minHeight = minHeight
-        self.matchedRuleId = matchedRuleId
-        self.heuristicReasons = heuristicReasons
-        self.attributeFetchSucceeded = attributeFetchSucceeded
-    }
-}
-
-public struct IPCFocusedWindowDecisionQueryResult: Codable, Equatable, Sendable {
-    public let window: IPCFocusedWindowDecisionSnapshot?
-
-    public init(window: IPCFocusedWindowDecisionSnapshot?) {
-        self.window = window
-    }
-}
-
-public struct IPCReconcileDebugQueryResult: Codable, Equatable, Sendable {
-    public let snapshot: String
-    public let trace: String
-    public let metrics: String
-    public let traceLimit: Int
-
-    public init(snapshot: String, trace: String, metrics: String = "", traceLimit: Int) {
-        self.snapshot = snapshot
-        self.trace = trace
-        self.metrics = metrics
-        self.traceLimit = traceLimit
-    }
-}
-
 public struct IPCResult: Codable, Equatable, Sendable {
     public enum Payload: Equatable, Sendable {
         case pong(IPCPingResult)
@@ -2584,8 +2473,6 @@ public struct IPCResult: Codable, Equatable, Sendable {
         case commands(IPCCommandsQueryResult)
         case subscriptions(IPCSubscriptionsQueryResult)
         case capabilities(IPCCapabilitiesQueryResult)
-        case focusedWindowDecision(IPCFocusedWindowDecisionQueryResult)
-        case reconcileDebug(IPCReconcileDebugQueryResult)
         case subscribed(IPCSubscribeResult)
     }
 
@@ -2661,14 +2548,6 @@ public struct IPCResult: Codable, Equatable, Sendable {
         self.init(kind: .capabilities, payload: .capabilities(capabilities))
     }
 
-    public init(focusedWindowDecision: IPCFocusedWindowDecisionQueryResult) {
-        self.init(kind: .focusedWindowDecision, payload: .focusedWindowDecision(focusedWindowDecision))
-    }
-
-    public init(reconcileDebug: IPCReconcileDebugQueryResult) {
-        self.init(kind: .reconcileDebug, payload: .reconcileDebug(reconcileDebug))
-    }
-
     public init(subscribed: IPCSubscribeResult) {
         self.init(kind: .subscribed, payload: .subscribed(subscribed))
     }
@@ -2715,14 +2594,6 @@ public struct IPCResult: Codable, Equatable, Sendable {
             payload = .subscriptions(try container.decode(IPCSubscriptionsQueryResult.self, forKey: .payload))
         case .capabilities:
             payload = .capabilities(try container.decode(IPCCapabilitiesQueryResult.self, forKey: .payload))
-        case .focusedWindowDecision:
-            payload = .focusedWindowDecision(
-                try container.decode(IPCFocusedWindowDecisionQueryResult.self, forKey: .payload)
-            )
-        case .reconcileDebug:
-            payload = .reconcileDebug(
-                try container.decode(IPCReconcileDebugQueryResult.self, forKey: .payload)
-            )
         case .subscribed:
             payload = .subscribed(try container.decode(IPCSubscribeResult.self, forKey: .payload))
         }
@@ -2764,10 +2635,6 @@ public struct IPCResult: Codable, Equatable, Sendable {
         case let .subscriptions(payload):
             try container.encode(payload, forKey: .payload)
         case let .capabilities(payload):
-            try container.encode(payload, forKey: .payload)
-        case let .focusedWindowDecision(payload):
-            try container.encode(payload, forKey: .payload)
-        case let .reconcileDebug(payload):
             try container.encode(payload, forKey: .payload)
         case let .subscribed(payload):
             try container.encode(payload, forKey: .payload)

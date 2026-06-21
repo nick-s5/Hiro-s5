@@ -11,6 +11,10 @@ struct OmniWMStoragePaths: Equatable {
         resolve()
     }
 
+    var diagnosticsDirectory: URL {
+        stateDirectory.appendingPathComponent("diagnostics", isDirectory: true)
+    }
+
     static func resolve(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser

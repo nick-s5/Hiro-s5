@@ -124,6 +124,24 @@ final class AXManager {
         frameLedger.pendingFrameWrite(for: windowId)
     }
 
+    func frameStateDump() -> String {
+        var sections = ["Ledger:\n\(frameLedger.stateDump())"]
+        let inactive = inactiveWorkspaceWindowIds.sorted()
+        let inactiveText = inactive.isEmpty ? "none" : inactive.map(String.init).joined(separator: ",")
+        sections.append("inactiveWorkspaceWindows=\(inactiveText)")
+        let retryTasks = pendingFrameRetryTasksByWindowId.keys.sorted()
+        if !retryTasks.isEmpty {
+            sections.append("pendingRetryTasks=" + retryTasks.map(String.init).joined(separator: ","))
+        }
+        if !pendingFrameRetryGenerationByWindowId.isEmpty {
+            let generations = pendingFrameRetryGenerationByWindowId.sorted { $0.key < $1.key }
+                .map { "\($0.key):\($0.value)" }
+                .joined(separator: ",")
+            sections.append("retryGenerations=" + generations)
+        }
+        return sections.joined(separator: "\n")
+    }
+
     func shouldSuppressFrameChangeRelayout(for windowId: Int, observedFrame: CGRect?) -> Bool {
         frameLedger.shouldSuppressFrameChangeRelayout(for: windowId, observedFrame: observedFrame)
     }
@@ -137,6 +155,7 @@ final class AXManager {
         guard oldWindowId != newWindowId else { return }
         AppAXContext.contexts[pid]?.rekeyWindow(oldWindowId: oldWindowId, newWindow: newWindow)
         frameLedger.rekeyWindowState(oldWindowId: oldWindowId, newWindowId: newWindowId)
+        FrameApplyTrace.recordEvent(pid: pid, windowId: oldWindowId, outcome: "outcome=rekey→\(newWindowId)")
 
         if inactiveWorkspaceWindowIds.remove(oldWindowId) != nil {
             inactiveWorkspaceWindowIds.insert(newWindowId)
@@ -490,13 +509,28 @@ final class AXManager {
 
     private func handleFrameApplyResults(_ results: [AXFrameApplyResult]) {
         let outcome = frameLedger.handleFrameApplyResults(results)
+        for result in results {
+            FrameApplyTrace.recordResult(result)
+        }
         for retry in outcome.retries {
+            FrameApplyTrace.recordEvent(
+                pid: retry.pid,
+                windowId: retry.windowId,
+                outcome: "outcome=retry-scheduled",
+                target: retry.frame
+            )
             scheduleFrameRetry(pid: retry.pid, windowId: retry.windowId, frame: retry.frame)
         }
         for delivery in outcome.deliveries {
             delivery.deliver()
         }
         for refusal in outcome.terminalRefusals {
+            FrameApplyTrace.recordEvent(
+                pid: refusal.pid,
+                windowId: refusal.windowId,
+                outcome: "outcome=terminal-refusal",
+                target: refusal.targetFrame
+            )
             onTerminalFrameRefusal?(refusal)
         }
     }

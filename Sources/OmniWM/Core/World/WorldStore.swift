@@ -65,6 +65,7 @@ final class WorldStore {
     private var broadcastMarks = InvalidationMarks()
     private var workspaceMarks: [WorkspaceDescriptor.ID: InvalidationMarks] = [:]
     private var commitDepth = 0
+    private var currentCommitEvent: WMEvent?
 
     var isEngineMutationSanctioned: Bool {
         commitDepth > 0
@@ -90,9 +91,12 @@ final class WorldStore {
     ) -> ReconcileTxn {
         commitDepth += 1
         pushEngineSanction()
+        let previousCommitEvent = currentCommitEvent
+        currentCommitEvent = event
         defer {
             commitDepth -= 1
             pushEngineSanction()
+            currentCommitEvent = previousCommitEvent
         }
         seq &+= 1
         let committedSeq = seq
@@ -475,13 +479,53 @@ extension WorldStore {
 
     func applyFocusSession(_ focusSession: FocusSessionSnapshot) {
         assertInCommit("applyFocusSession")
+        recordInteractionMonitorWrites(
+            previousInteraction: focus.interactionMonitorId,
+            previousPrevious: focus.previousInteractionMonitorId,
+            to: focusSession
+        )
         focus = focusSession
     }
 
     @discardableResult
     func updateFocus<T>(_ mutate: (inout FocusSessionSnapshot) -> T) -> T {
         assertInCommit("updateFocus")
-        return mutate(&focus)
+        let previousInteraction = focus.interactionMonitorId
+        let previousPrevious = focus.previousInteractionMonitorId
+        let result = mutate(&focus)
+        recordInteractionMonitorWrites(
+            previousInteraction: previousInteraction,
+            previousPrevious: previousPrevious,
+            to: focus
+        )
+        return result
+    }
+
+    private func recordInteractionMonitorWrites(
+        previousInteraction: Monitor.ID?,
+        previousPrevious: Monitor.ID?,
+        to next: FocusSessionSnapshot
+    ) {
+        let interactionChanged = previousInteraction != next.interactionMonitorId
+        let previousChanged = previousPrevious != next.previousInteractionMonitorId
+        guard interactionChanged || previousChanged else { return }
+        let reason = currentCommitEvent?.summary ?? "unknown"
+        if interactionChanged {
+            InteractionMonitorWriteRecorder.shared.record(
+                field: .interaction,
+                oldValue: previousInteraction,
+                newValue: next.interactionMonitorId,
+                reason: reason
+            )
+        }
+        if previousChanged {
+            InteractionMonitorWriteRecorder.shared.record(
+                field: .previous,
+                oldValue: previousPrevious,
+                newValue: next.previousInteractionMonitorId,
+                reason: reason
+            )
+        }
     }
 
     private func reconcileNiriMembership(

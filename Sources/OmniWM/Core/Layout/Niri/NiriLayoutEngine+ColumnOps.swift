@@ -70,6 +70,11 @@ extension NiriLayoutEngine {
             .insertionIndex(in: targetColumn)
             .clamped(to: 0 ... targetColumn.children.count)
         targetColumn.insertChild(node, at: insertedIndex)
+        NiriLayoutTrace.record(
+            .insertion,
+            workspaceId: workspaceId,
+            "moveToColumn index=\(insertedIndex) policy=\(String(describing: targetInsertionPolicy)) count=\(targetColumn.children.count)"
+        )
         resetMovedWindowColumnLocalSizing(node)
 
         if sourceWasTabbed, !sourceColumn.children.isEmpty {

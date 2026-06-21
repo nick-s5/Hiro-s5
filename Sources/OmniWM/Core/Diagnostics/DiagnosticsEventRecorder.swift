@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 BarutSRB — https://github.com/BarutSRB/OmniWM
+
+import Foundation
+import Synchronization
+
+final class DiagnosticsEventRecorder: @unchecked Sendable {
+    static let shared = DiagnosticsEventRecorder()
+
+    struct Record: Sendable {
+        let timestamp: Date
+        let name: String
+        let pid: pid_t?
+        let windowId: UInt32?
+    }
+
+    private static let lifecycleLimit = 512
+    private static let verboseLimit = 4096
+
+    private let lifecycle = LockedRingBuffer<Record>(capacity: DiagnosticsEventRecorder.lifecycleLimit)
+    private let verbose = LockedRingBuffer<Record>(capacity: DiagnosticsEventRecorder.verboseLimit)
+    private let verboseActive = Atomic<Bool>(false)
+
+    func recordLifecycle(name: String, pid: pid_t? = nil, windowId: UInt32? = nil) {
+        lifecycle.append(Record(timestamp: Date(), name: name, pid: pid, windowId: windowId))
+    }
+
+    func recordVerbose(name: String, pid: pid_t? = nil, windowId: UInt32? = nil) {
+        guard verboseActive.load(ordering: .relaxed) else { return }
+        verbose.append(Record(timestamp: Date(), name: name, pid: pid, windowId: windowId))
+    }
+
+    func recordCGS(_ event: CGSWindowEvent) {
+        switch event {
+        case let .created(windowId, _):
+            recordLifecycle(name: "cgs.created", windowId: windowId)
+        case let .destroyed(windowId, _):
+            recordLifecycle(name: "cgs.destroyed", windowId: windowId)
+        case let .closed(windowId):
+            recordLifecycle(name: "cgs.closed", windowId: windowId)
+        case let .frameChanged(windowId):
+            recordVerbose(name: "cgs.frameChanged", windowId: windowId)
+        case let .orderChanged(windowId):
+            recordVerbose(name: "cgs.orderChanged", windowId: windowId)
+        case let .titleChanged(windowId):
+            recordVerbose(name: "cgs.titleChanged", windowId: windowId)
+        case let .frontAppChanged(pid):
+            recordVerbose(name: "cgs.frontAppChanged", pid: pid)
+        }
+    }
+
+    func beginVerboseCapture() {
+        verbose.removeAll()
+        verboseActive.store(true, ordering: .relaxed)
+    }
+
+    func endVerboseCapture() {
+        verboseActive.store(false, ordering: .relaxed)
+    }
+
+    func dumpLifecycle() -> String {
+        format(lifecycle.snapshot())
+    }
+
+    func dumpVerbose() -> String {
+        format(verbose.snapshot())
+    }
+
+    private func format(_ records: [Record]) -> String {
+        guard !records.isEmpty else { return "none" }
+        return records
+            .map { record in
+                var line = "\(record.timestamp.ISO8601Format()) ev=\(record.name)"
+                if let pid = record.pid {
+                    line += " pid=\(pid)"
+                }
+                if let windowId = record.windowId {
+                    line += " win=\(windowId)"
+                }
+                return line
+            }
+            .joined(separator: "\n")
+    }
+}

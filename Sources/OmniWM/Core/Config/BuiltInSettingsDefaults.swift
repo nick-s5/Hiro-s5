@@ -140,7 +140,7 @@ enum BuiltInSettingsDefaults {
 
     private static func uuid(_ value: String) -> UUID {
         guard let uuid = UUID(uuidString: value) else {
-            preconditionFailure("Invalid built-in settings UUID: \(value)")
+            fatalOffMain("Invalid built-in settings UUID: \(value)")
         }
         return uuid
     }

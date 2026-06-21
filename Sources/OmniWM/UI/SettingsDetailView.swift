@@ -8,6 +8,7 @@ struct SettingsDetailView: View {
     @Bindable var settings: SettingsStore
     @Bindable var controller: WMController
     let updateCoordinator: (any AppUpdateCoordinating)?
+    let navigation: SettingsNavigationModel
 
     var body: some View {
         contentView
@@ -26,6 +27,8 @@ struct SettingsDetailView: View {
                 controller: controller,
                 updateCoordinator: updateCoordinator
             )
+        case .diagnostics:
+            DiagnosticsSettingsTab(controller: controller, navigation: navigation)
         case .niri:
             NiriSettingsTab(settings: settings, controller: controller)
         case .dwindle:
@@ -42,6 +45,8 @@ struct SettingsDetailView: View {
             HotkeySettingsView(settings: settings, controller: controller)
         case .quakeTerminal:
             QuakeTerminalSettingsTab(settings: settings, controller: controller)
+        case .reportIssue:
+            ReportIssueSettingsTab(controller: controller)
         }
     }
 }

@@ -19,6 +19,26 @@ struct SpaceTopology: Equatable, Sendable {
         !displays.isEmpty
     }
 
+    var debugSummary: String {
+        guard isPopulated || !windowSpace.isEmpty else { return "none" }
+        var lines = [
+            "active=\(activeSpaceId) populated=\(isPopulated) fullscreen=\(formatIds(fullscreenSpaceIds.sorted()))"
+        ]
+        for display in displays {
+            lines.append(
+                "display=\(display.displayIdentifier) current=\(display.currentSpaceId) spaces=\(formatIds(display.spaceIds))"
+            )
+        }
+        for windowId in windowSpace.keys.sorted() {
+            lines.append("window=\(windowId) space=\(windowSpace[windowId] ?? 0)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func formatIds(_ ids: [UInt64]) -> String {
+        "[\(ids.map(String.init).joined(separator: ","))]"
+    }
+
     func spaceForWindow(_ windowId: Int) -> UInt64? {
         windowSpace[windowId]
     }

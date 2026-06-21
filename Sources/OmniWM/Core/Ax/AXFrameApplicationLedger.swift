@@ -88,6 +88,24 @@ final class AXFrameApplicationLedger {
         pendingFrameWrites[windowId]
     }
 
+    func stateDump() -> String {
+        let windowIds = Set(lastAppliedFrames.keys)
+            .union(pendingFrameWrites.keys)
+            .union(recentFrameWriteFailures.keys)
+            .union(retryBudgetByWindowId.keys)
+        guard !windowIds.isEmpty else { return "none" }
+        return windowIds.sorted()
+            .map { windowId in
+                var parts = ["win=\(windowId)"]
+                if let frame = lastAppliedFrames[windowId] { parts.append("lastApplied=\(TraceFormat.rect(frame))") }
+                if let pending = pendingFrameWrites[windowId] { parts.append("pending=\(TraceFormat.rect(pending))") }
+                if let failure = recentFrameWriteFailures[windowId] { parts.append("failure=\(failure)") }
+                if let retry = retryBudgetByWindowId[windowId] { parts.append("retryBudget=\(retry)") }
+                return parts.joined(separator: " ")
+            }
+            .joined(separator: "\n")
+    }
+
     private func frameWithinConvergence(cached: CGRect, target: CGRect, windowId: Int) -> Bool {
         guard let quantum = sizeQuantumByWindowId[windowId] else {
             return cached.approximatelyEqual(to: target, tolerance: FrameTolerance.frameWrite)

@@ -637,7 +637,7 @@ struct WindowDecision {
 
 ### 4.8 IPC System
 
-For the protocol spec, wire format, and CLI reference, see [IPC-CLI.md](IPC-CLI.md). This section covers the internal code architecture. The current wire protocol version is **5** (`Sources/OmniWMIPC/IPCModels.swift`).
+For the protocol spec, wire format, and CLI reference, see [IPC-CLI.md](IPC-CLI.md). This section covers the internal code architecture. The current wire protocol version is **6** (`Sources/OmniWMIPC/IPCModels.swift`).
 
 ```
 omniwmctl                         OmniWM process
@@ -836,7 +836,7 @@ IPCClient connects to the Unix socket, sends NDJSON
     v
 IPCServer accepts → IPCConnection (actor) reads the line → IPCRequest
     v
-IPCApplicationBridge (actor): verify token + protocol version 5
+IPCApplicationBridge (actor): verify token + protocol version 6
     │  for mutating commands: EventIntake.post(.ipcCommand(intake))
     v
 EventInterpreter (.ipcCommand) → intake.perform(controller)             [STAGE 1]

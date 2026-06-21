@@ -349,6 +349,6 @@ final class SettingsFilePersistence {
     }
 
     private func report(_ message: String) {
-        fputs("[SettingsFilePersistence] \(message)\n", stderr)
+        Log.config.error(message)
     }
 }

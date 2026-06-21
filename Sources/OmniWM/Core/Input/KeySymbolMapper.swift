@@ -153,6 +153,18 @@ enum KeySymbolMapper {
         return symbols
     }
 
+    static func sidedModifierLabel(_ rawFlags: UInt64) -> String {
+        ModifierFlagMask.all
+            .compactMap { mask -> String? in
+                guard rawFlags & mask.independent != 0 else { return nil }
+                let symbol = orderedModifiers.first { $0.carbon == mask.carbon }?.symbol ?? "?"
+                if rawFlags & mask.left != 0 { return "L" + symbol }
+                if rawFlags & mask.right != 0 { return "R" + symbol }
+                return symbol
+            }
+            .joined()
+    }
+
     static func keySymbol(_ keyCode: UInt32) -> String {
         keyDescriptors[keyCode]?.compact ?? "?"
     }

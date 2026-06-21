@@ -2,6 +2,7 @@
 // Copyright (C) 2026 BarutSRB — https://github.com/BarutSRB/OmniWM
 
 import AppKit
+import QuartzCore
 
 @MainActor
 final class StatusBarController: NSObject {
@@ -17,6 +18,7 @@ final class StatusBarController: NSObject {
     private let cliManager: AppCLIManager?
     private let updateCoordinator: (any AppUpdateCoordinating)?
     private let statusItemDefaults: UserDefaults
+    private let recordingPulseKey = "omniwm.recordingPulse"
     private weak var controller: WMController?
 
     init(
@@ -114,6 +116,51 @@ final class StatusBarController: NSObject {
         menu = menuBuilder?.buildMenu()
     }
 
+    func handleTraceCaptureStateChange() {
+        updateButtonAppearance()
+        rebuildMenu()
+    }
+
+    func updateButtonAppearance() {
+        guard let button = statusItem?.button else { return }
+        button.wantsLayer = true
+        if controller?.isTraceCaptureActive == true {
+            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            button.image = NSImage(
+                systemSymbolName: "record.circle.fill",
+                accessibilityDescription: "OmniWM, recording diagnostics"
+            )?.withSymbolConfiguration(config)
+            button.image?.isTemplate = false
+            button.contentTintColor = nil
+            button.toolTip = "OmniWM — recording diagnostics (auto-stops in 10 min)"
+            applyRecordingPulse(to: button)
+        } else {
+            button.layer?.removeAnimation(forKey: recordingPulseKey)
+            button.layer?.opacity = 1
+            button.image = NSImage(systemSymbolName: "o.circle", accessibilityDescription: "OmniWM")
+            button.image?.isTemplate = true
+            button.contentTintColor = nil
+            button.toolTip = nil
+        }
+    }
+
+    private func applyRecordingPulse(to button: NSStatusBarButton) {
+        guard controller?.motionPolicy.animationsEnabled != false else {
+            button.layer?.removeAnimation(forKey: recordingPulseKey)
+            button.layer?.opacity = 1
+            return
+        }
+        guard button.layer?.animation(forKey: recordingPulseKey) == nil else { return }
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = 0.3
+        pulse.duration = 0.7
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        button.layer?.add(pulse, forKey: recordingPulseKey)
+    }
+
     static func truncatedStatusBarAppName(_ appName: String) -> String {
         guard appName.count > maxStatusBarAppNameLength else { return appName }
         return String(appName.prefix(maxStatusBarAppNameLength)) + "\u{2026}"
@@ -130,10 +177,7 @@ final class StatusBarController: NSObject {
     func refreshWorkspaces() {
         guard let button = statusItem?.button else { return }
 
-        if button.image == nil {
-            button.image = NSImage(systemSymbolName: "o.circle", accessibilityDescription: "OmniWM")
-            button.image?.isTemplate = true
-        }
+        updateButtonAppearance()
 
         guard settings.statusBarShowWorkspaceName,
               let summary = controller?.activeStatusBarWorkspaceSummary()

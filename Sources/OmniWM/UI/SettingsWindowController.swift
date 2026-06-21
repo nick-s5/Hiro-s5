@@ -10,12 +10,18 @@ final class SettingsWindowController {
 
     private var window: NSWindow?
     private let ownedWindowRegistry = OwnedWindowRegistry.shared
+    private let navigation = SettingsNavigationModel()
 
     func show(
         settings: SettingsStore,
         controller: WMController,
-        updateCoordinator: (any AppUpdateCoordinating)? = nil
+        updateCoordinator: (any AppUpdateCoordinating)? = nil,
+        section: SettingsSection? = nil
     ) {
+        if let section {
+            navigation.section = section
+        }
+
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -25,7 +31,8 @@ final class SettingsWindowController {
         let settingsView = SettingsView(
             settings: settings,
             controller: controller,
-            updateCoordinator: updateCoordinator
+            updateCoordinator: updateCoordinator,
+            navigation: navigation
         )
 
         let hosting = NSHostingController(rootView: settingsView)
