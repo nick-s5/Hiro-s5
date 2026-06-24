@@ -34,8 +34,8 @@ final class SponsorsWindowController {
         window.titleVisibility = .hidden
         window.isOpaque = false
         window.backgroundColor = .clear
-        window.setContentSize(NSSize(width: 640, height: 540))
-        window.minSize = NSSize(width: 480, height: 440)
+        window.setContentSize(NSSize(width: 1280, height: 1040))
+        window.minSize = NSSize(width: 760, height: 640)
         window.center()
         window.isReleasedWhenClosed = false
         ownedWindowRegistry.register(window)
