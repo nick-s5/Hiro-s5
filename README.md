@@ -39,6 +39,13 @@
       <a href="https://github.com/chen259456754"><strong>chen259456754</strong></a>
     </td>
     <td align="center">
+      <a href="https://github.com/nekonora" title="Filippo Zaffoni">
+        <img src="https://github.com/nekonora.png?size=96" width="96" alt="Filippo Zaffoni">
+      </a>
+      <br>
+      <a href="https://github.com/nekonora"><strong>Filippo Zaffoni</strong></a>
+    </td>
+    <td align="center">
       <a href="https://github.com/janhesters" title="Jan Hesters">
         <img src="https://github.com/janhesters.png?size=96" width="96" alt="Jan Hesters">
       </a>
@@ -126,6 +133,10 @@
 </p>
 <p align="center">
   <a href="https://trendshift.io/repositories/16758" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16758" alt="BarutSRB%2FOmniWM | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+<p align="center">
+  <a href="https://trendshift.io/repositories/16758?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-16758" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/16758/weekly?language=Swift" alt="BarutSRB%2FOmniWM | Trendshift" width="250" height="55"/></a>
+  <a href="https://trendshift.io/repositories/16758?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-16758" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/16758/monthly?language=Swift" alt="BarutSRB%2FOmniWM | Trendshift" width="250" height="55"/></a>
 </p>
 
 Small demo, not fully showing everything, gif recorded at 30fps due to size, some stuff is now more refined and better as soem gifs might be outdated, features shown:

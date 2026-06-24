@@ -36,6 +36,26 @@ model. Put notes in this guide instead.
   the user's current config and appended by the app at runtime — don't hardcode specific
   shortcuts in the file.
 
+## Model limits to keep in mind
+
+The rewrite runs on Apple's small on-device foundation model
+(`LanguageModelSession` in `Sources/OmniWM/Core/IssueReporter/FoundationModelsIssueEngine.swift`),
+which has a **fixed 4096-token context window**. That budget is shared across *everything*
+in one request: your prompt instructions, the conditional hotkey preamble plus the
+runtime-resolved `KNOWN SHORTCUTS` list, the user's message, and the model's generated
+issue. If the total exceeds 4096 tokens the framework throws `.exceededContextWindowSize`,
+the rewrite fails, and the app falls back to the deterministic (no-AI) formatter.
+
+- **Every word you add to the prompt files is permanent overhead** — it subtracts from the
+  room left for the user's report and the generated output on every single request. Keep
+  the instructions tight.
+- **Write for a small model.** Plain, direct, imperative prose works best; long explanations
+  or clever phrasing waste budget and reduce reliability.
+- **Mind the output length too.** The finished GitHub issue URL is capped at 8000 characters
+  (`maxURLLength` in `GitHubIssueURLBuilder.swift`); a longer body is copied to the clipboard
+  instead of opening the browser, so steering the model toward verbose output quietly
+  degrades the one-click submit flow.
+
 ## How to test your edit
 
 - Run the focused tests: `swift test --filter IssueReporterTests`. These confirm the
