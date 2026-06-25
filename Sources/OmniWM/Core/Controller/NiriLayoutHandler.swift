@@ -99,10 +99,12 @@ import QuartzCore
             return
         }
 
+        let scrollTrace = ScrollTickTrace.shared.isActive
+        let animsStart = scrollTrace ? CACurrentMediaTime() : 0
         let windowAnimationsRunning = engine.tickAllWindowAnimations(in: wsId, at: targetTime)
         let columnAnimationsRunning = engine.tickAllColumnAnimations(in: wsId, at: targetTime)
-
         let viewportMotionRunning = controller.workspaceManager.animationDriver.tick(in: wsId, at: targetTime)
+        let animsMs = scrollTrace ? (CACurrentMediaTime() - animsStart) * 1000 : 0
         let state = controller.workspaceManager.niriViewportState(for: wsId)
 
         let didApplyFrames = applyFramesOnDemand(
@@ -110,7 +112,8 @@ import QuartzCore
             state: state,
             engine: engine,
             monitor: monitor,
-            animationTime: targetTime
+            animationTime: targetTime,
+            animsMs: animsMs
         )
         guard didApplyFrames else {
             controller.layoutRefreshController.requestRelayout(
@@ -148,29 +151,98 @@ import QuartzCore
         state: ViewportState,
         engine: NiriLayoutEngine,
         monitor: Monitor,
-        animationTime: TimeInterval? = nil
+        animationTime: TimeInterval? = nil,
+        animsMs: Double = 0
     ) -> Bool {
         guard let controller,
-              let activeWorkspaceId = controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id,
-              let snapshot = makeWorkspaceSnapshot(
-                  workspaceId: wsId,
-                  monitor: monitor,
-                  viewportState: state,
-                  useScrollAnimationPath: true,
-                  removalSeed: nil,
-                  isActiveWorkspace: activeWorkspaceId == wsId
-              )
+              let activeWorkspaceId = controller.workspaceManager.activeWorkspaceOrFirst(on: monitor.id)?.id
         else {
             return false
         }
 
+        let trace = ScrollTickTrace.shared.isActive && animationTime != nil
+        let snapshotStart = trace ? CACurrentMediaTime() : 0
+        guard let snapshot = makeWorkspaceSnapshot(
+            workspaceId: wsId,
+            monitor: monitor,
+            viewportState: state,
+            useScrollAnimationPath: true,
+            removalSeed: nil,
+            isActiveWorkspace: activeWorkspaceId == wsId
+        ) else {
+            return false
+        }
+        let snapshotMs = trace ? (CACurrentMediaTime() - snapshotStart) * 1000 : 0
+
+        let buildStart = CACurrentMediaTime()
         let plan = buildOnDemandLayoutPlan(
             snapshot: snapshot,
             engine: engine,
             monitor: monitor,
             animationTime: animationTime
         )
-        return controller.layoutRefreshController.executeLayoutPlan(plan)
+        let buildSeconds = CACurrentMediaTime() - buildStart
+        controller.layoutRefreshController.recordScrollBuild(
+            seconds: buildSeconds,
+            workspaceCount: 1,
+            windowCount: controller.workspaceManager.entries(in: wsId).count
+        )
+
+        let commitStart = trace ? CACurrentMediaTime() : 0
+        let applied = controller.layoutRefreshController.executeLayoutPlan(plan)
+        if trace {
+            recordScrollTickBreakdown(
+                plan: plan,
+                monitor: monitor,
+                windowCount: snapshot.windows.count,
+                spans: ScrollTickSpans(
+                    anims: animsMs,
+                    snapshot: snapshotMs,
+                    build: buildSeconds * 1000,
+                    commit: (CACurrentMediaTime() - commitStart) * 1000
+                )
+            )
+        }
+        return applied
+    }
+
+    private struct ScrollTickSpans {
+        let anims: Double
+        let snapshot: Double
+        let build: Double
+        let commit: Double
+    }
+
+    private func recordScrollTickBreakdown(
+        plan: WorkspaceLayoutPlan,
+        monitor: Monitor,
+        windowCount: Int,
+        spans: ScrollTickSpans
+    ) {
+        var show = 0
+        var hide = 0
+        for change in plan.diff.visibilityChanges {
+            switch change {
+            case .show: show += 1
+            case .hide: hide += 1
+            }
+        }
+        ScrollTickTrace.shared.record(
+            ScrollTickTrace.Record(
+                mediaTime: CACurrentMediaTime(),
+                displayId: monitor.displayId,
+                animsMs: spans.anims,
+                snapshotMs: spans.snapshot,
+                buildMs: spans.build,
+                commitMs: spans.commit,
+                totalMs: spans.anims + spans.snapshot + spans.build + spans.commit,
+                show: show,
+                hide: hide,
+                frames: plan.diff.frameChanges.count,
+                windowCount: windowCount,
+                isAnimationTick: true
+            )
+        )
     }
 
     private func finalizeAnimation() {

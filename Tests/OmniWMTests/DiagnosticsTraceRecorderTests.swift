@@ -83,8 +83,53 @@ final class DiagnosticsTraceRecorderTests: XCTestCase {
 
         RawAXNotificationTrace.record(name: "ax.during", pid: 7, windowId: 42)
         NiriLayoutTrace.record(.viewport, workspaceId: nil, "jump 0→10 col=0")
+        AnimationTickTrace.shared.record(
+            AnimationTickTrace.Record(
+                mediaTime: 1,
+                displayId: 1,
+                intervalMs: 99,
+                expectedMs: 6,
+                scrollMs: 5,
+                dwindleMs: 0,
+                closingMs: 0,
+                reconcileMs: 1,
+                totalMs: 6,
+                dropped: true
+            )
+        )
+        BorderOpMetricsRecorder.shared.noteApply()
+        ScrollTickTrace.shared.record(
+            ScrollTickTrace.Record(
+                mediaTime: 2,
+                displayId: 1,
+                animsMs: 0.1,
+                snapshotMs: 0.2,
+                buildMs: 0.1,
+                commitMs: 290.0,
+                totalMs: 290.4,
+                show: 1,
+                hide: 1,
+                frames: 9,
+                windowCount: 12,
+                isAnimationTick: true
+            )
+        )
+        AXWriteLatencyTrace.shared.record(
+            AXWriteLatencyTrace.Record(
+                mediaTime: 2,
+                pid: 4242,
+                count: 9,
+                totalMs: 288.0,
+                slowestMs: 250.0,
+                enhancedUI: true
+            )
+        )
         XCTAssertTrue(RawAXNotificationTrace.shared.dump().contains("ax.during"))
         XCTAssertTrue(NiriLayoutTrace.shared.dump().contains("jump 0→10"))
+        XCTAssertTrue(AnimationTickTrace.shared.dump().contains("DROPPED"))
+        XCTAssertTrue(BorderOpMetricsRecorder.shared.dump().contains("applyCalls=1"))
+        XCTAssertTrue(ScrollTickTrace.shared.dump().contains("commit=290.00ms"))
+        XCTAssertTrue(AXWriteLatencyTrace.shared.dump().contains("pid=4242"))
 
         let outcome = coordinator.toggle(desiredState: .inactive) { "report" }
         guard case let .stopped(artifact) = outcome else {
@@ -94,10 +139,51 @@ final class DiagnosticsTraceRecorderTests: XCTestCase {
         XCTAssertTrue(body.contains("== Raw AX Notifications =="))
         XCTAssertTrue(body.contains("== Niri Layout Trace =="))
         XCTAssertTrue(body.contains("== Frame Apply Trace =="))
+        XCTAssertTrue(body.contains("== Animation Tick Timing =="))
+        XCTAssertTrue(body.contains("== Scroll Tick Breakdown =="))
+        XCTAssertTrue(body.contains("== AX Write Latency =="))
+        XCTAssertTrue(body.contains("== Border Op Metrics =="))
         XCTAssertTrue(body.contains("== Mouse Trace =="))
         try? FileManager.default.removeItem(at: artifact.url)
 
         RawAXNotificationTrace.record(name: "ax.after", pid: 1, windowId: nil)
         XCTAssertFalse(RawAXNotificationTrace.shared.dump().contains("ax.after"))
+    }
+
+    func testBorderOpMetricsRecorderGatingAndReset() {
+        let recorder = BorderOpMetricsRecorder()
+
+        recorder.noteApply()
+        XCTAssertEqual(recorder.dump(), "none", "counters ignored while inactive")
+
+        recorder.beginCapture()
+        recorder.noteApply()
+        recorder.noteUpdate()
+        recorder.noteMoveOnly()
+        recorder.noteMoveOnly()
+        recorder.noteCornerRadiusQuery()
+        let dump = recorder.dump()
+        XCTAssertTrue(dump.contains("applyCalls=1"))
+        XCTAssertTrue(dump.contains("updateCalls=1"))
+        XCTAssertTrue(dump.contains("moveOnly=2"))
+        XCTAssertTrue(dump.contains("queries=1"))
+
+        recorder.endCapture()
+        recorder.noteApply()
+        XCTAssertTrue(recorder.dump().contains("applyCalls=1"), "counters frozen after capture ends")
+
+        recorder.beginCapture()
+        XCTAssertEqual(recorder.dump(), "none", "beginCapture resets counters")
+    }
+
+    func testLayoutBuildMetricsSeparatesRoutes() {
+        var metrics = LayoutBuildMetrics()
+        metrics.recordBuild(seconds: 0.001, route: .relayout, workspaceCount: 1, windowCount: 12)
+        metrics.recordBuild(seconds: 0.002, route: .scrollTick, workspaceCount: 1, windowCount: 12)
+
+        let dump = metrics.dump()
+        XCTAssertTrue(dump.contains("builds=2"))
+        XCTAssertTrue(dump.contains("route=relayout ws=1 win=11-20"))
+        XCTAssertTrue(dump.contains("route=scrollTick ws=1 win=11-20"))
     }
 }

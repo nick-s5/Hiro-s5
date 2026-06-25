@@ -33,6 +33,8 @@ final class BorderSurfaceApplier {
             return true
         }
 
+        BorderOpMetricsRecorder.shared.noteApply()
+
         if borderWindow == nil {
             borderWindow = BorderWindow(config: desired.config, operations: borderWindowOperations)
         } else {
@@ -46,6 +48,7 @@ final class BorderSurfaceApplier {
            appliedCornerRadius == cornerRadius,
            desired.frame.approximatelyEqual(to: applied.frame, tolerance: FrameTolerance.frameWrite)
         {
+            BorderOpMetricsRecorder.shared.noteShortCircuit()
             if forceOrdering {
                 borderWindow?.reorder(relativeTo: UInt32(desired.windowId))
             }
@@ -87,9 +90,11 @@ final class BorderSurfaceApplier {
 
     private func resolvedCornerRadius(for windowId: Int) -> CGFloat {
         if cachedCornerRadiusWindowId == windowId, let cachedCornerRadius {
+            BorderOpMetricsRecorder.shared.noteCornerRadiusHit()
             return cachedCornerRadius
         }
 
+        BorderOpMetricsRecorder.shared.noteCornerRadiusQuery()
         let cornerRadius = max(cornerRadiusProvider(windowId) ?? defaultCornerRadius, 0)
         cachedCornerRadiusWindowId = windowId
         cachedCornerRadius = cornerRadius

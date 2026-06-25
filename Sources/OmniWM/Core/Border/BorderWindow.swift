@@ -84,6 +84,7 @@ final class BorderWindow {
         cornerRadius: CGFloat = 9.0,
         forceOrdering: Bool = false
     ) -> Bool {
+        BorderOpMetricsRecorder.shared.noteUpdate()
         let borderWidth = config.width
         let scale = operations.backingScaleForFrame(targetFrame)
         let resolvedCornerRadius = max(cornerRadius, 0)
@@ -160,12 +161,14 @@ final class BorderWindow {
     }
 
     private func reshapeWindow(frame: CGRect) {
+        BorderOpMetricsRecorder.shared.noteReshape()
         operations.setWindowShape(wid, frame)
     }
 
     private func draw(frame: CGRect, drawingBounds: CGRect) {
         guard let context else { return }
         needsRedraw = false
+        BorderOpMetricsRecorder.shared.noteRedraw()
 
         let borderWidth = config.width
         let cornerRadius = currentCornerRadius
@@ -206,10 +209,12 @@ final class BorderWindow {
 
     private func move(relativeTo targetWid: UInt32, needsOrdering: Bool) {
         if needsOrdering {
+            BorderOpMetricsRecorder.shared.noteMoveAndOrder()
             operations.transactionMoveAndOrder(wid, origin, orderingLevel, targetWid, .below)
             return
         }
 
+        BorderOpMetricsRecorder.shared.noteMoveOnly()
         operations.transactionMove(wid, origin)
     }
 

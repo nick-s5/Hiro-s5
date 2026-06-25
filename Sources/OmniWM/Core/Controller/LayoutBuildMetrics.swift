@@ -4,7 +4,13 @@
 import Foundation
 
 struct LayoutBuildMetrics {
+    enum Route: String {
+        case relayout
+        case scrollTick
+    }
+
     private struct Bucket: Hashable {
+        let route: Route
         let workspaceCount: Int
         let windowRank: Int
     }
@@ -21,9 +27,13 @@ struct LayoutBuildMetrics {
     private(set) var totalBuilds = 0
     private(set) var completedRelayoutCycles = 0
 
-    mutating func recordBuild(seconds: Double, workspaceCount: Int, windowCount: Int) {
+    mutating func recordBuild(seconds: Double, route: Route, workspaceCount: Int, windowCount: Int) {
         let micros = Int((seconds * 1_000_000).rounded())
-        let bucket = Bucket(workspaceCount: workspaceCount, windowRank: Self.windowRank(windowCount))
+        let bucket = Bucket(
+            route: route,
+            workspaceCount: workspaceCount,
+            windowRank: Self.windowRank(windowCount)
+        )
         var stat = statsByBucket[bucket] ?? Stat()
         stat.count += 1
         stat.totalMicros += micros
@@ -45,13 +55,15 @@ struct LayoutBuildMetrics {
             return lines.joined(separator: "\n")
         }
         let sorted = statsByBucket.sorted {
-            ($0.key.workspaceCount, $0.key.windowRank) < ($1.key.workspaceCount, $1.key.windowRank)
+            ($0.key.route.rawValue, $0.key.workspaceCount, $0.key.windowRank)
+                < ($1.key.route.rawValue, $1.key.workspaceCount, $1.key.windowRank)
         }
         for (bucket, stat) in sorted {
             let average = stat.count > 0 ? stat.totalMicros / stat.count : 0
             let windowLabel = Self.windowLabels[bucket.windowRank]
             lines.append(
-                "ws=\(bucket.workspaceCount) win=\(windowLabel) n=\(stat.count) avg=\(average)us max=\(stat.maxMicros)us"
+                "route=\(bucket.route.rawValue) ws=\(bucket.workspaceCount) win=\(windowLabel)"
+                    + " n=\(stat.count) avg=\(average)us max=\(stat.maxMicros)us"
             )
         }
         return lines.joined(separator: "\n")

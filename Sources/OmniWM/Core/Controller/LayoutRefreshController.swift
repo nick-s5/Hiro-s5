@@ -154,6 +154,7 @@ import QuartzCore
         var isIncrementalRefreshInProgress: Bool = false
         var isFullEnumerationInProgress: Bool = false
         var displayLinksByDisplay: [CGDirectDisplayID: CADisplayLink] = [:]
+        var lastDisplayLinkTimestampByDisplay: [CGDirectDisplayID: CFTimeInterval] = [:]
         var refreshRateByDisplay: [CGDirectDisplayID: Double] = [:]
         var closingAnimationsByDisplay: [CGDirectDisplayID: [Int: ClosingAnimation]] = [:]
         var screenChangeObserver: NSObjectProtocol?
@@ -250,10 +251,42 @@ import QuartzCore
         guard let displayId = layoutState.displayLinksByDisplay.first(where: { $0.value === displayLink })?.key
         else { return }
 
+        let traceActive = AnimationTickTrace.shared.isActive
+        let t0 = traceActive ? CACurrentMediaTime() : 0
+
         niriHandler.tickScrollAnimation(targetTime: displayLink.targetTimestamp, displayId: displayId)
+        let t1 = traceActive ? CACurrentMediaTime() : 0
         dwindleHandler.tickDwindleAnimation(targetTime: displayLink.targetTimestamp, displayId: displayId)
+        let t2 = traceActive ? CACurrentMediaTime() : 0
         tickClosingAnimations(targetTime: displayLink.targetTimestamp, displayId: displayId)
+        let t3 = traceActive ? CACurrentMediaTime() : 0
         controller?.surfaceReconciler.reconcileAnimationTick()
+
+        guard traceActive else { return }
+        let t4 = CACurrentMediaTime()
+        let previousTimestamp = layoutState.lastDisplayLinkTimestampByDisplay[displayId]
+        layoutState.lastDisplayLinkTimestampByDisplay[displayId] = displayLink.timestamp
+
+        let expectedMs = displayLink.duration * 1000
+        let intervalMs = previousTimestamp.map { (displayLink.timestamp - $0) * 1000 } ?? 0
+        let totalMs = (t4 - t0) * 1000
+        let dropped = (previousTimestamp != nil && intervalMs > 1.5 * expectedMs)
+            || (expectedMs > 0 && totalMs > expectedMs)
+
+        AnimationTickTrace.shared.record(
+            AnimationTickTrace.Record(
+                mediaTime: t4,
+                displayId: displayId,
+                intervalMs: intervalMs,
+                expectedMs: expectedMs,
+                scrollMs: (t1 - t0) * 1000,
+                dwindleMs: (t2 - t1) * 1000,
+                closingMs: (t3 - t2) * 1000,
+                reconcileMs: (t4 - t3) * 1000,
+                totalMs: totalMs,
+                dropped: dropped
+            )
+        )
     }
 
     func startScrollAnimation(for workspaceId: WorkspaceDescriptor.ID, forGesture: Bool = false) {
@@ -982,6 +1015,7 @@ import QuartzCore
         )
         layoutBuildMetrics.recordBuild(
             seconds: CACurrentMediaTime() - buildStart,
+            route: .relayout,
             workspaceCount: plan.workspacePlans.count,
             windowCount: plan.workspacePlans.reduce(0) {
                 $0 + controller.workspaceManager.entries(in: $1.workspaceId).count
@@ -1105,6 +1139,15 @@ import QuartzCore
 
     func layoutBuildMetricsDump() -> String {
         layoutBuildMetrics.dump()
+    }
+
+    func recordScrollBuild(seconds: Double, workspaceCount: Int, windowCount: Int) {
+        layoutBuildMetrics.recordBuild(
+            seconds: seconds,
+            route: .scrollTick,
+            workspaceCount: workspaceCount,
+            windowCount: windowCount
+        )
     }
 
     private func applyRefreshMetadata(_ refresh: ScheduledRefresh, to plan: inout EffectPlan) {
@@ -2292,13 +2335,20 @@ import QuartzCore
         case unavailable
     }
 
-    fileprivate func applyPositionPlans(_ plans: [WindowPositionPlan]) {
+    fileprivate func applyPositionPlans(_ plans: [WindowPositionPlan], animationTick: Bool = false) {
         guard let controller, !plans.isEmpty else { return }
 
         controller.axManager.applyPositionsViaSkyLight(
             plans.map { (windowId: $0.entry.windowId, origin: $0.origin) },
             allowInactive: true
         )
+
+        if animationTick {
+            for plan in plans {
+                controller.axManager.recordSkyLightMove(windowId: plan.entry.windowId, origin: plan.origin)
+            }
+            return
+        }
 
         let verifyEpsilon: CGFloat = 1.0
         for plan in plans {
@@ -2307,7 +2357,10 @@ import QuartzCore
                || abs(observedOrigin.y - plan.origin.y) > verifyEpsilon
             {
                 let fallbackFrame = CGRect(origin: plan.origin, size: plan.frameSize)
-                _ = AXWindowService.setFrame(plan.entry.axRef, frame: fallbackFrame)
+                let axRef = plan.entry.axRef
+                AppAXContext.contexts[plan.entry.pid]?.axThread?.runInLoopAsync { _ in
+                    _ = AXWindowService.setFrame(axRef, frame: fallbackFrame)
+                }
             }
         }
     }
@@ -2317,14 +2370,19 @@ import QuartzCore
         monitor: Monitor,
         side: HideSide,
         reason: HideReason,
-        hiddenPlacementMonitors: [HiddenPlacementMonitorContext]? = nil
+        hiddenPlacementMonitors: [HiddenPlacementMonitorContext]? = nil,
+        animationTick: Bool = false
     ) -> HideOperationResolution {
         guard let controller else { return .unavailable }
-        guard let frame = fastFrame(for: entry.token, axRef: entry.axRef)
+        let axFrameFallback = animationTick ? nil : (try? AXWindowService.frame(entry.axRef))
+        guard var frame = fastFrame(for: entry.token, axRef: entry.axRef)
             ?? controller.axManager.lastAppliedFrame(for: entry.windowId)
-            ?? (try? AXWindowService.frame(entry.axRef))
+            ?? axFrameFallback
         else {
             return .unavailable
+        }
+        if let liveOrigin = controller.axManager.skyLightLivePosition(for: entry.windowId) {
+            frame.origin = liveOrigin
         }
         let hiddenState = updatedHiddenState(
             for: entry,
@@ -3371,7 +3429,8 @@ final class LayoutDiffExecutor {
                     for: entry,
                     monitor: monitor,
                     side: side,
-                    reason: .layoutTransient
+                    reason: .layoutTransient,
+                    animationTick: plan.isAnimationTick
                 ) {
                 case let .movable(plan, hiddenState):
                     controller.workspaceManager.setHiddenState(hiddenState, for: entry.token)
@@ -3390,7 +3449,7 @@ final class LayoutDiffExecutor {
                 controller.axManager.suppressFrameWrites(hiddenJobs)
             }
             if !hidePlans.isEmpty {
-                refreshController.applyPositionPlans(hidePlans)
+                refreshController.applyPositionPlans(hidePlans, animationTick: plan.isAnimationTick)
             }
         }
 
@@ -3406,7 +3465,7 @@ final class LayoutDiffExecutor {
                         hiddenState: hiddenState
                     )
                 }
-            refreshController.applyPositionPlans(restorePlans)
+            refreshController.applyPositionPlans(restorePlans, animationTick: plan.isAnimationTick)
 
             for (entry, _) in restoreEntries
                 where pendingRevealTransactionIdsByToken[entry.token] == nil
@@ -3481,9 +3540,7 @@ final class LayoutDiffExecutor {
             }
         }
 
-        if !frameUpdates.isEmpty {
-            controller.axManager.applyFramesParallel(frameUpdates, verify: !plan.isAnimationTick)
-        }
+        applyFrameUpdates(frameUpdates, isAnimationTick: plan.isAnimationTick, controller: controller)
 
         if !revealFrameUpdates.isEmpty {
             var revealTransactionIdsByWindowId: [Int: UInt64] = [:]
@@ -3511,6 +3568,26 @@ final class LayoutDiffExecutor {
                 }
             )
         }
+    }
+
+    private func applyFrameUpdates(
+        _ frameUpdates: [(pid: pid_t, windowId: Int, frame: CGRect)],
+        isAnimationTick: Bool,
+        controller: WMController
+    ) {
+        guard !frameUpdates.isEmpty else { return }
+        let axManager = controller.axManager
+
+        guard isAnimationTick else {
+            for update in frameUpdates where axManager.skyLightLivePosition(for: update.windowId) != nil {
+                axManager.forceApplyNextFrame(for: update.windowId)
+            }
+            axManager.applyFramesParallel(frameUpdates, verify: true)
+            axManager.clearSkyLightLivePositions()
+            return
+        }
+
+        axManager.applyFramesParallel(frameUpdates, verify: false)
     }
 
     private func resolveMonitor(

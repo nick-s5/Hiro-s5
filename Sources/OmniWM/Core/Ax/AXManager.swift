@@ -41,6 +41,8 @@ final class AXManager {
     /// Window IDs belonging to inactive workspaces — checked LIVE in applyFramesParallel.
     private(set) var inactiveWorkspaceWindowIds: Set<Int> = []
 
+    private var skyLightLivePositionByWindowId: [Int: CGPoint] = [:]
+
     init() {
         setupTerminationObserver()
         setupLaunchObserver()
@@ -108,6 +110,22 @@ final class AXManager {
         frameLedger.lastAppliedFrame(for: windowId)
     }
 
+    func recordSkyLightMove(windowId: Int, origin: CGPoint) {
+        skyLightLivePositionByWindowId[windowId] = origin
+    }
+
+    func skyLightLivePosition(for windowId: Int) -> CGPoint? {
+        skyLightLivePositionByWindowId[windowId]
+    }
+
+    func clearSkyLightLivePositions() {
+        skyLightLivePositionByWindowId.removeAll(keepingCapacity: true)
+    }
+
+    private func clearSkyLightLivePosition(for windowId: Int) {
+        skyLightLivePositionByWindowId.removeValue(forKey: windowId)
+    }
+
     func recentFrameWriteFailure(for windowId: Int) -> AXFrameWriteFailureReason? {
         frameLedger.recentFrameWriteFailure(for: windowId)
     }
@@ -171,6 +189,7 @@ final class AXManager {
 
     func confirmFrameWrite(for windowId: Int, frame: CGRect) {
         frameLedger.confirmFrameWrite(for: windowId, frame: frame)
+        clearSkyLightLivePosition(for: windowId)
     }
 
     func removeWindowState(pid: pid_t, windowId: Int) {
@@ -179,6 +198,7 @@ final class AXManager {
         let deliveries = frameLedger.removeWindowState(windowId: windowId)
         cancelPendingFrameRetry(for: windowId)
         inactiveWorkspaceWindowIds.remove(windowId)
+        clearSkyLightLivePosition(for: windowId)
 
         for delivery in deliveries {
             delivery.deliver()
@@ -427,6 +447,7 @@ final class AXManager {
         for (_, windowId) in entries {
             deliveries.append(contentsOf: frameLedger.suppressFrameWrite(windowId: windowId))
             cancelPendingFrameRetry(for: windowId)
+            clearSkyLightLivePosition(for: windowId)
         }
         for delivery in deliveries {
             delivery.deliver()

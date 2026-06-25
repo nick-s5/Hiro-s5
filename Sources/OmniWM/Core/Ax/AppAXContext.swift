@@ -547,6 +547,9 @@ final class AppAXContext {
         let currentPid = pid
 
         let batchJob = appThread.runInLoopAsync { [axApp, windows] job in
+            let latencyActive = AXWriteLatencyTrace.shared.isActive
+            let batchStart = latencyActive ? CACurrentMediaTime() : 0
+            var slowestWriteMs = 0.0
             let enhancedUIKey = "AXEnhancedUserInterface" as CFString
             var wasEnabled = false
             var value: CFTypeRef?
@@ -621,12 +624,29 @@ final class AppAXContext {
                     )
                     continue
                 }
+                let writeStart = latencyActive ? CACurrentMediaTime() : 0
                 results.append(
                     applyFrameWriteRequest(
                         request,
                         pid: currentPid,
                         windows: windows,
                         generations: generations
+                    )
+                )
+                if latencyActive {
+                    slowestWriteMs = max(slowestWriteMs, (CACurrentMediaTime() - writeStart) * 1000)
+                }
+            }
+
+            if latencyActive {
+                AXWriteLatencyTrace.shared.record(
+                    AXWriteLatencyTrace.Record(
+                        mediaTime: CACurrentMediaTime(),
+                        pid: currentPid,
+                        count: requests.count,
+                        totalMs: (CACurrentMediaTime() - batchStart) * 1000,
+                        slowestMs: slowestWriteMs,
+                        enhancedUI: wasEnabled
                     )
                 )
             }
