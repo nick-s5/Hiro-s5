@@ -49,15 +49,24 @@ func makeKeyWindow(psn: inout ProcessSerialNumber, windowId: UInt32) {
         eventBytes[i] = 0xFF
     }
 
-    _ = SLPSPostEventRecordTo(&psn, &eventBytes)
+    if SLPSPostEventRecordTo(&psn, &eventBytes) != noErr {
+        FallbackFiringRecorder.shared.note("skylight", "postEventRecordFailed")
+    }
     eventBytes[0x08] = 0x02
-    _ = SLPSPostEventRecordTo(&psn, &eventBytes)
+    if SLPSPostEventRecordTo(&psn, &eventBytes) != noErr {
+        FallbackFiringRecorder.shared.note("skylight", "postEventRecordFailed")
+    }
 }
 
 func focusWindow(pid: pid_t, windowId: UInt32, windowRef _: AXUIElement) {
     var psn = ProcessSerialNumber()
-    guard GetProcessForPID(pid, &psn) == noErr else { return }
+    guard GetProcessForPID(pid, &psn) == noErr else {
+        FallbackFiringRecorder.shared.note("skylight", "getProcessForPIDFailed")
+        return
+    }
 
-    _ = _SLPSSetFrontProcessWithOptions(&psn, windowId, kCPSUserGenerated)
+    if _SLPSSetFrontProcessWithOptions(&psn, windowId, kCPSUserGenerated) != noErr {
+        FallbackFiringRecorder.shared.note("skylight", "setFrontProcessFailed")
+    }
     makeKeyWindow(psn: &psn, windowId: windowId)
 }

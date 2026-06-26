@@ -20,6 +20,7 @@ final class CGSEventObserver {
 
     private var isRegistered = false
     private var isWindowClosedNotifyRegistered = false
+    private(set) var lastRegistrationSummary = "not started"
 
     private init() {}
 
@@ -45,6 +46,8 @@ final class CGSEventObserver {
             )
             if success {
                 successCount += 1
+            } else {
+                FallbackFiringRecorder.shared.note("skylight", "eventRegistrationFailed")
             }
         }
 
@@ -61,9 +64,13 @@ final class CGSEventObserver {
             if windowClosedSuccess {
                 successCount += 1
                 isWindowClosedNotifyRegistered = true
+            } else {
+                FallbackFiringRecorder.shared.note("skylight", "windowClosedRegistrationFailed")
             }
         }
 
+        let total = eventsViaConnectionNotify.count + 1
+        lastRegistrationSummary = "\(successCount)/\(total) events registered"
         let registered = successCount > 0
         isRegistered = registered
         cgsTransportEnabled.withLock { $0 = registered }

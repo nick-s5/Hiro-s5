@@ -256,6 +256,7 @@ final class AXManager {
 
         let visibleWindows = SkyLight.shared.queryAllVisibleWindows()
         var pidsWithWindows = Set(visibleWindows.map { $0.pid })
+        let skyLightPidCount = pidsWithWindows.count
 
         // Some Electron apps are missed by the broad SLS enumeration but are
         // visible through CGWindowList. Add regular rendered windows from the
@@ -273,7 +274,14 @@ final class AXManager {
                 else { continue }
                 pidsWithWindows.insert(pid_t(pidNumber))
             }
+        } else {
+            FallbackFiringRecorder.shared.note("capture", "cgWindowListNull")
         }
+        FallbackFiringRecorder.shared.note(
+            "capture",
+            "cgWindowListSupplementPids",
+            pidsWithWindows.count - skyLightPidCount
+        )
 
         let apps = NSWorkspace.shared.runningApplications.filter {
             shouldTrack($0) && pidsWithWindows.contains($0.processIdentifier)

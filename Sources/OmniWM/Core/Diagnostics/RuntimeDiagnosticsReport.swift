@@ -10,6 +10,7 @@ enum RuntimeDiagnosticsReport {
         [
             systemSection(controller),
             section("Active Issues", issuesSection(controller)),
+            section("Private API Capability", PrivateAPIHealthDiagnostics.snapshot().formatted()),
             section("Recent Errors", LogErrorTap.shared.dump()),
             monitorSection(),
             section("Space Topology", controller.workspaceManager.spaceTopology.debugSummary),

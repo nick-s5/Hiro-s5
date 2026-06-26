@@ -55,6 +55,32 @@ final class MultitouchBinding {
         self.unregisterFunc = unregisterFunc
     }
 
+    static let symbolNames = [
+        "MTDeviceCreateList",
+        "MTDeviceStart",
+        "MTDeviceStop",
+        "MTRegisterContactFrameCallback",
+        "MTUnregisterContactFrameCallback"
+    ]
+
+    static func probeAvailability() -> Bool {
+        MultitouchBinding() != nil
+    }
+
+    static func resolvedSymbols() -> [(name: String, resolved: Bool)] {
+        guard let lib = dlopen(
+            "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport",
+            RTLD_LAZY
+        ) else {
+            return symbolNames.map { ($0, false) }
+        }
+        return symbolNames.map { ($0, dlsym(lib, $0) != nil) }
+    }
+
+    func deviceCount() -> Int {
+        devices()?.refs.count ?? -1
+    }
+
     func devices() -> (list: CFArray, refs: [DeviceRef])? {
         guard let array = createListFunc()?.takeRetainedValue() else { return nil }
         let count = CFArrayGetCount(array)

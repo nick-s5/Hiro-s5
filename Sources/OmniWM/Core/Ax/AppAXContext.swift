@@ -176,23 +176,33 @@ final class AppAXContext {
                     let axApp = AXUIElementCreateApplication(pid)
 
                     var observer: AXObserver?
-                    AXObserverCreate(pid, axWindowNotificationCallback, &observer)
+                    if AXObserverCreate(pid, axWindowNotificationCallback, &observer) != .success {
+                        FallbackFiringRecorder.shared.note("ax", "observerCreateFailed")
+                    }
 
                     if let obs = observer {
                         CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), .defaultMode)
+                    } else {
+                        FallbackFiringRecorder.shared.note("ax", "observerRunLoopSourceSkipped")
                     }
 
                     var focusObserver: AXObserver?
-                    AXObserverCreate(pid, axFocusedWindowChangedCallback, &focusObserver)
+                    if AXObserverCreate(pid, axFocusedWindowChangedCallback, &focusObserver) != .success {
+                        FallbackFiringRecorder.shared.note("ax", "focusObserverCreateFailed")
+                    }
 
                     if let focusObs = focusObserver {
-                        AXObserverAddNotification(
+                        if AXObserverAddNotification(
                             focusObs,
                             axApp,
                             kAXFocusedWindowChangedNotification as CFString,
                             nil
-                        )
+                        ) != .success {
+                            FallbackFiringRecorder.shared.note("ax", "focusedWindowSubscribeFailed")
+                        }
                         CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(focusObs), .defaultMode)
+                    } else {
+                        FallbackFiringRecorder.shared.note("ax", "focusObserverRunLoopSourceSkipped")
                     }
 
                     let guardedAxApp = ThreadGuardedValue(axApp)
@@ -280,12 +290,17 @@ final class AppAXContext {
             kAXUIElementDestroyedNotification as CFString,
             refcon
         )
-        AXObserverAddNotification(
+        if destroyResult != .success {
+            FallbackFiringRecorder.shared.note("ax", "destroySubscribeFailed")
+        }
+        if AXObserverAddNotification(
             observer,
             element,
             kAXWindowMiniaturizedNotification as CFString,
             refcon
-        )
+        ) != .success {
+            FallbackFiringRecorder.shared.note("ax", "miniaturizeSubscribeFailed")
+        }
         return destroyResult == .success
     }
 

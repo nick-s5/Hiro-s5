@@ -106,7 +106,9 @@ struct CommandPaletteEnvironment {
     }
 
     var performMenuAction: (AXUIElement) -> Void = { element in
-        AXUIElementPerformAction(element, "AXPress" as CFString)
+        if AXUIElementPerformAction(element, "AXPress" as CFString) != .success {
+            FallbackFiringRecorder.shared.note("ax", "performPressFailed")
+        }
     }
 
     var clipboardItems: (WMController) -> [ClipboardPaletteItem] = { controller in

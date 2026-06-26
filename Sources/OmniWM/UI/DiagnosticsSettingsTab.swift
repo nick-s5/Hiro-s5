@@ -17,6 +17,7 @@ struct DiagnosticsSettingsTab: View {
 
     @State private var traceStatus: DiagnosticsActionStatus = .idle
     @State private var recoveryStatus: DiagnosticsActionStatus = .idle
+    @State private var probeStatus: DiagnosticsActionStatus = .idle
     @State private var recentFiles: [DiagnosticsFile] = []
     @State private var reloadToken = 0
 
@@ -28,6 +29,7 @@ struct DiagnosticsSettingsTab: View {
         Form {
             crashBannerSection
             healthSection
+            privateAPICapabilitySection
             recordingSection
             savedDiagnosticsSection
             windowSnapshotSection
@@ -120,6 +122,21 @@ struct DiagnosticsSettingsTab: View {
             Text(issue.message)
                 .font(.callout)
             SettingsCaption(issue.remediation)
+        }
+    }
+
+    @ViewBuilder
+    private var privateAPICapabilitySection: some View {
+        Section("Private-API Capability") {
+            Button("Run Private-API Probe") {
+                runPrivateAPIProbe()
+            }
+            statusLabel(probeStatus)
+            SettingsCaption(
+                "Checks every private window-server API on this Mac and confirms it actually works — including a "
+                    + "quick test that nudges a real window a few pixels and restores it. The full result is written "
+                    + "into the Private API Capability section of your next diagnostics report."
+            )
         }
     }
 
@@ -266,6 +283,20 @@ struct DiagnosticsSettingsTab: View {
                 reloadToken += 1
             } catch {
                 recoveryStatus = .failure("Failed to write window dump: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func runPrivateAPIProbe() {
+        Task {
+            let report = await controller.runPrivateAPIProbe()
+            let failures = report.selfTests.filter { $0.outcome == .failed }.count
+            let foreign = report.foreign
+                .map { "foreign-window move=\($0.skylightMoved ? "yes" : "no")" } ?? "no foreign window probed"
+            if failures == 0 {
+                probeStatus = .success("\(report.selfTests.count) checks, 0 failures · \(foreign)")
+            } else {
+                probeStatus = .failure("\(failures) of \(report.selfTests.count) checks failed · \(foreign)")
             }
         }
     }

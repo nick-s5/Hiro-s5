@@ -34,7 +34,9 @@ struct WindowFocusOperations {
             OmniWM.focusWindow(pid: pid, windowId: windowId, windowRef: element)
         },
         raiseWindow: { element in
-            AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+            if AXUIElementPerformAction(element, kAXRaiseAction as CFString) != .success {
+                FallbackFiringRecorder.shared.note("ax", "performRaiseFailed")
+            }
         },
         orderWindow: { windowId in
             SkyLight.shared.orderWindow(windowId, relativeTo: 0, order: .above)

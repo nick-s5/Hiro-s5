@@ -131,14 +131,18 @@ final class WindowActionHandler {
         guard let entry = controller.workspaceManager.entry(for: handle) else { return }
 
         let element = entry.axRef.element
-        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        if AXUIElementPerformAction(element, kAXRaiseAction as CFString) != .success {
+            FallbackFiringRecorder.shared.note("ax", "performRaiseFailed")
+        }
 
         var closeButton: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &closeButton) == .success,
            let closeButton,
            CFGetTypeID(closeButton) == AXUIElementGetTypeID()
         {
-            AXUIElementPerformAction(closeButton as! AXUIElement, kAXPressAction as CFString)
+            if AXUIElementPerformAction(closeButton as! AXUIElement, kAXPressAction as CFString) != .success {
+                FallbackFiringRecorder.shared.note("ax", "performPressFailed")
+            }
         }
     }
 
