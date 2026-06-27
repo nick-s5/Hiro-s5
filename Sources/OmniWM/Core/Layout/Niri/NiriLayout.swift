@@ -772,8 +772,22 @@ extension NiriLayoutEngine {
                 animatedFrame = renderedBaseFrame.roundedToPhysicalPixels(scale: scale)
             case .normal:
                 let windowOffset = windowRenderOffsets[i]
-                animatedFrame = renderedBaseFrame.offsetBy(dx: windowOffset.x, dy: windowOffset.y)
-                    .roundedToPhysicalPixels(scale: scale)
+                var offsetFrame = renderedBaseFrame.offsetBy(dx: windowOffset.x, dy: windowOffset.y)
+                switch orientation {
+                case .horizontal:
+                    let minY = renderedContainerRect.minY
+                    let maxY = renderedContainerRect.maxY - offsetFrame.height
+                    if maxY >= minY {
+                        offsetFrame.origin.y = min(max(offsetFrame.origin.y, minY), maxY)
+                    }
+                case .vertical:
+                    let minX = renderedContainerRect.minX
+                    let maxX = renderedContainerRect.maxX - offsetFrame.width
+                    if maxX >= minX {
+                        offsetFrame.origin.x = min(max(offsetFrame.origin.x, minX), maxX)
+                    }
+                }
+                animatedFrame = offsetFrame.roundedToPhysicalPixels(scale: scale)
             }
             windows[i].renderedFrame = animatedFrame
             result[windowTokens[i]] = animatedFrame
