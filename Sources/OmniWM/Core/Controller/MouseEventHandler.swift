@@ -89,6 +89,7 @@ final class MouseEventHandler {
         var isResizing: Bool = false
         var isMoving: Bool = false
         var activeInteractionButton: MouseButton?
+        var resizeLayout: LayoutType?
 
         var lastFocusFollowsMouseTime: Date = .distantPast
         let focusFollowsMouseDebounce: TimeInterval = 0.1
@@ -435,8 +436,10 @@ final class MouseEventHandler {
 
         if state.isResizing {
             controller.niriEngine?.clearInteractiveResize()
+            controller.dwindleEngine?.clearInteractiveResize()
             state.isResizing = false
             state.activeInteractionButton = nil
+            state.resizeLayout = nil
         }
 
         resetHoveredEdgesIfNeeded()
@@ -514,11 +517,17 @@ final class MouseEventHandler {
             return false
         }
 
-        guard let engine = controller.niriEngine,
-              let wsId = workspaceIdForPointer(at: location) ?? controller.activeWorkspace()?.id
-        else {
+        guard let wsId = workspaceIdForPointer(at: location) ?? controller.activeWorkspace()?.id else {
             return false
         }
+
+        let layoutType = controller.workspaceManager.descriptor(for: wsId)
+            .map { controller.settings.layoutType(for: $0.name) }
+        if layoutType == .dwindle {
+            return handleDwindleMouseDown(at: location, modifiers: modifiers, button: button, wsId: wsId)
+        }
+
+        guard let engine = controller.niriEngine else { return false }
 
         if button == .left,
            modifiers.intersection(mouseRelevantModifierFlags).isEmpty,
@@ -602,6 +611,40 @@ final class MouseEventHandler {
         return false
     }
 
+    private func handleDwindleMouseDown(
+        at location: CGPoint,
+        modifiers: CGEventFlags,
+        button: MouseButton,
+        wsId: WorkspaceDescriptor.ID
+    ) -> Bool {
+        guard let controller, let engine = controller.dwindleEngine else { return false }
+        guard button == .right,
+              Self.modifierFlagsMatch(modifiers, required: controller.settings.mouseResizeModifierKey.cgEventFlag)
+        else { return false }
+
+        let now = controller.animationClock.now()
+        guard let token = engine.hitTestFocusableWindow(point: location, in: wsId, at: now),
+              let node = engine.findNode(for: token),
+              let frame = node.presentedFrame(at: now)
+        else { return false }
+
+        let edges = resizeEdges(for: location, in: frame)
+        guard engine.interactiveResizeBegin(token: token, edges: edges, startLocation: location, in: wsId) else {
+            return false
+        }
+
+        if let monitor = controller.workspaceManager.monitor(for: wsId) {
+            controller.layoutRefreshController.stopDwindleAnimation(for: monitor.displayId)
+        }
+        engine.cancelAnimations(in: wsId)
+        state.isResizing = true
+        state.activeInteractionButton = button
+        state.currentHoveredEdges = edges
+        state.resizeLayout = .dwindle
+        edges.cursor.set()
+        return true
+    }
+
     private func resizeEdges(for location: CGPoint, in frame: CGRect) -> ResizeEdge {
         var edges: ResizeEdge = location.x < frame.midX ? [.left] : [.right]
         edges.insert(location.y < frame.midY ? .bottom : .top)
@@ -678,6 +721,16 @@ final class MouseEventHandler {
         guard state.isResizing else { return }
         guard shouldAcceptInteractionButton(button) else { return }
 
+        if state.resizeLayout == .dwindle {
+            guard let engine = controller.dwindleEngine,
+                  let wsId = engine.interactiveResize?.workspaceId
+            else { return }
+            if engine.interactiveResizeUpdate(currentLocation: location) {
+                controller.layoutRefreshController.renderDwindleInteractiveResize(for: wsId)
+            }
+            return
+        }
+
         guard let engine = controller.niriEngine,
               let monitor = controller.monitorForInteraction()
         else {
@@ -750,6 +803,21 @@ final class MouseEventHandler {
 
         guard state.isResizing else { return }
         guard shouldAcceptInteractionButton(button) else { return }
+
+        if state.resizeLayout == .dwindle {
+            let engine = controller.dwindleEngine
+            let wsId = engine?.interactiveResize?.workspaceId
+            if let engine, engine.interactiveResizeEnd(), let wsId {
+                controller.workspaceManager.recordLayoutOperation(.splitRatioChanged, in: wsId, source: .mouse)
+                controller.layoutRefreshController.requestImmediateRelayout(reason: .interactiveGesture)
+            }
+            state.isResizing = false
+            state.activeInteractionButton = nil
+            state.resizeLayout = nil
+            NSCursor.arrow.set()
+            state.currentHoveredEdges = []
+            return
+        }
 
         if let engine = controller.niriEngine,
            let wsId = controller.activeWorkspace()?.id,

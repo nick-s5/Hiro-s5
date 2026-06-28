@@ -828,6 +828,13 @@ import QuartzCore
         )
     }
 
+    func renderDwindleInteractiveResize(for workspaceId: WorkspaceDescriptor.ID) {
+        guard let controller,
+              let monitor = controller.workspaceManager.monitor(for: workspaceId)
+        else { return }
+        _ = dwindleHandler.applyFramesOnDemand(workspaceId: workspaceId, monitor: monitor)
+    }
+
     func requestLayoutCommandRelayout(
         affectedWorkspaceIds: Set<WorkspaceDescriptor.ID>,
         postLayout: PostLayoutAction? = nil,

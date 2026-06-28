@@ -17,6 +17,8 @@ final class DwindleLayoutEngine {
     var animationClock: AnimationClock?
     var isMutationSanctioned = true
 
+    var interactiveResize: DwindleInteractiveResize?
+
     func assertSanctionedMutation(_ operation: StaticString = #function) {
         assert(
             isMutationSanctioned,
