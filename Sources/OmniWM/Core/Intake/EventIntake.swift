@@ -23,7 +23,7 @@ enum IntakeEvent: Sendable {
     case intentExpired(intentId: IntentID)
     case ipcCommand(IPCCommandIntake)
     case mouseDragged(button: MouseEventHandler.MouseButton, location: CGPoint)
-    case mouseMoved(location: CGPoint)
+    case mouseMoved(location: CGPoint, modifiersRawValue: UInt64)
     case mouseScroll(MouseScrollIntake)
     case systemSleep
     case systemWake
@@ -208,12 +208,16 @@ final class EventIntake {
                 state.openRightDraggedSeq = state.nextSeq
             }
 
-        case let .mouseMoved(location):
+        case let .mouseMoved(location, modifiersRawValue):
             if state.openScrollSeq != nil {
                 state.closeMouseCoalescingWindows()
             }
             if let openSeq = state.openMouseMovedSeq,
-               updatePendingEvent(seq: openSeq, in: &state, to: .mouseMoved(location: location))
+               updatePendingEvent(
+                   seq: openSeq,
+                   in: &state,
+                   to: .mouseMoved(location: location, modifiersRawValue: modifiersRawValue)
+               )
             {
                 return
             }

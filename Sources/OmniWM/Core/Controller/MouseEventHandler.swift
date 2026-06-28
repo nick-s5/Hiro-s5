@@ -206,12 +206,12 @@ final class MouseEventHandler {
         multitouchSource?.stop()
     }
 
-    func dispatchMouseMoved(at location: CGPoint) {
+    func dispatchMouseMoved(at location: CGPoint, modifiersRawValue: UInt64 = 0) {
         guard !isInputSuppressed else {
             resetHoveredEdgesIfNeeded()
             return
         }
-        handleMouseMovedFromTap(at: location)
+        handleMouseMovedFromTap(at: location, modifiersRawValue: modifiersRawValue)
     }
 
     @discardableResult
@@ -288,8 +288,8 @@ final class MouseEventHandler {
         abortActiveGestureIfNeeded()
     }
 
-    func receiveTapMouseMoved(at location: CGPoint) {
-        EventIntake.post(.mouseMoved(location: location))
+    func receiveTapMouseMoved(at location: CGPoint, modifiersRawValue: UInt64) {
+        EventIntake.post(.mouseMoved(location: location, modifiersRawValue: modifiersRawValue))
     }
 
     @discardableResult
@@ -474,7 +474,7 @@ final class MouseEventHandler {
         handleMouseDraggedFromTap(at: location, button: button, requirePressedButtonCheck: false)
     }
 
-    private func handleMouseMovedFromTap(at location: CGPoint) {
+    private func handleMouseMovedFromTap(at location: CGPoint, modifiersRawValue: UInt64) {
         guard let controller else { return }
         guard controller.isEnabled else {
             resetHoveredEdgesIfNeeded()
@@ -487,7 +487,10 @@ final class MouseEventHandler {
             return
         }
 
-        if controller.focusFollowsMouseEnabled, shouldHandleFocusFollowsMouse(at: location) {
+        if controller.focusFollowsMouseEnabled,
+           !controller.settings.focusLockModifier.isHeld(inRawFlags: modifiersRawValue),
+           shouldHandleFocusFollowsMouse(at: location)
+        {
             handleFocusFollowsMouse(at: location)
         }
 
@@ -1477,7 +1480,7 @@ final class MouseEventHandler {
             guard let handler = MouseEventHandler._instance else { return }
             switch type {
             case .mouseMoved:
-                handler.receiveTapMouseMoved(at: screenLocation)
+                handler.receiveTapMouseMoved(at: screenLocation, modifiersRawValue: modifiers.rawValue)
             case .leftMouseDown:
                 _ = handler.receiveTapMouseDown(at: screenLocation, modifiers: modifiers)
             case .leftMouseDragged:

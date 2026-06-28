@@ -267,6 +267,22 @@ struct GeneralSettingsTab: View {
 
                 SettingsCaption("Hold this modifier combo + right mouse drag to resize tiled windows")
             }
+
+            Section("Focus Follows Mouse") {
+                Toggle("Enable Focus Follows Mouse", isOn: $settings.focusFollowsMouse)
+                    .onChange(of: settings.focusFollowsMouse) { _, newValue in
+                        controller.setFocusFollowsMouse(newValue)
+                    }
+
+                Picker("Focus Lock Modifier", selection: $settings.focusLockModifier) {
+                    ForEach(FocusLockModifier.allCases, id: \.self) { key in
+                        Text(key.displayName).tag(key)
+                    }
+                }
+                .disabled(!settings.focusFollowsMouse)
+
+                SettingsCaption("Hold this modifier to move the cursor over other windows without changing focus.")
+            }
         }
         .formStyle(.grouped)
         .onAppear {

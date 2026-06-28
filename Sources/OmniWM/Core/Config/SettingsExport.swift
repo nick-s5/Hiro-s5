@@ -16,6 +16,7 @@ struct SettingsColor: Codable, Equatable {
 struct SettingsExport: Equatable {
     var hotkeysEnabled: Bool
     var focusFollowsMouse: Bool
+    var focusLockModifier: String
     var moveMouseToFocusedWindow: Bool
     var focusFollowsWindowToMonitor: Bool
     var focusCrossesMonitorAtEdge: Bool
@@ -125,6 +126,7 @@ extension SettingsExport {
         SettingsExport(
             hotkeysEnabled: true,
             focusFollowsMouse: false,
+            focusLockModifier: FocusLockModifier.off.rawValue,
             moveMouseToFocusedWindow: false,
             focusFollowsWindowToMonitor: false,
             focusCrossesMonitorAtEdge: false,

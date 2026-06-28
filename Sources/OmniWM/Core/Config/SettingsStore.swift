@@ -27,6 +27,12 @@ final class SettingsStore {
         didSet { scheduleSave() }
     }
 
+    var focusLockModifier = FocusLockModifier(
+        rawValue: SettingsStore.defaultExport.focusLockModifier
+    ) ?? .off {
+        didSet { scheduleSave() }
+    }
+
     var moveMouseToFocusedWindow = SettingsStore.defaultExport.moveMouseToFocusedWindow {
         didSet { scheduleSave() }
     }
@@ -518,6 +524,7 @@ final class SettingsStore {
         SettingsExport(
             hotkeysEnabled: hotkeysEnabled,
             focusFollowsMouse: focusFollowsMouse,
+            focusLockModifier: focusLockModifier.rawValue,
             moveMouseToFocusedWindow: moveMouseToFocusedWindow,
             focusFollowsWindowToMonitor: focusFollowsWindowToMonitor,
             focusCrossesMonitorAtEdge: focusCrossesMonitorAtEdge,
@@ -615,6 +622,7 @@ final class SettingsStore {
 
         hotkeysEnabled = export.hotkeysEnabled
         focusFollowsMouse = export.focusFollowsMouse
+        focusLockModifier = FocusLockModifier(rawValue: export.focusLockModifier) ?? .off
         moveMouseToFocusedWindow = export.moveMouseToFocusedWindow
         focusFollowsWindowToMonitor = export.focusFollowsWindowToMonitor
         focusCrossesMonitorAtEdge = export.focusCrossesMonitorAtEdge

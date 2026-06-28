@@ -190,6 +190,28 @@ final class SettingsTOMLCodecTests: XCTestCase {
         XCTAssertEqual(try SettingsTOMLCodec.decode(unsupportedMouse).systemHyperTrigger, .none)
     }
 
+    func testFocusLockModifierRoundTrips() throws {
+        XCTAssertEqual(SettingsExport.defaults().focusLockModifier, FocusLockModifier.off.rawValue)
+        XCTAssertTrue(
+            String(decoding: try SettingsTOMLCodec.encode(.defaults()), as: UTF8.self)
+                .contains("lockModifier = \"off\"")
+        )
+
+        var export = SettingsExport.defaults()
+        export.focusLockModifier = FocusLockModifier.leftOption.rawValue
+        let data = try SettingsTOMLCodec.encode(export)
+
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("lockModifier = \"leftOption\""))
+        XCTAssertEqual(try SettingsTOMLCodec.decode(data).focusLockModifier, FocusLockModifier.leftOption.rawValue)
+    }
+
+    func testFocusLockModifierRecoversToOffWhenMissing() throws {
+        let withoutKey = try defaultsWithReplacements(
+            ("lockModifier = \"off\"\n", "")
+        )
+        XCTAssertEqual(try SettingsTOMLCodec.decode(withoutKey).focusLockModifier, FocusLockModifier.off.rawValue)
+    }
+
     func testFocusCrossesMonitorAtEdgeRoundTrips() throws {
         XCTAssertFalse(SettingsExport.defaults().focusCrossesMonitorAtEdge)
 

@@ -587,6 +587,71 @@ final class RuntimeArchitectureTests: XCTestCase {
     }
 
     @MainActor
+    func testFocusLockModifierSuppressesFocusFollowsMouseWhileHeld() throws {
+        var focusedTokens: [WindowToken] = []
+        let controller = Self.controller(
+            windowFocusOperations: WindowFocusOperations(
+                activateApp: { _ in },
+                focusSpecificWindow: { pid, windowId, _ in
+                    focusedTokens.append(WindowToken(pid: pid, windowId: Int(windowId)))
+                },
+                raiseWindow: { _ in }
+            )
+        )
+        let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
+        _ = controller.workspaceManager.focusWorkspace(named: "1")
+        controller.setFocusFollowsMouse(true)
+        controller.settings.focusLockModifier = .option
+        controller.niriLayoutHandler.enableNiriLayout()
+        let monitor = try XCTUnwrap(controller.workspaceManager.monitor(for: workspaceId))
+        let targetFrame = CGRect(
+            x: monitor.visibleFrame.minX + 24,
+            y: monitor.visibleFrame.minY + 24,
+            width: 240,
+            height: 160
+        )
+        let token = controller.workspaceManager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(765_706), windowId: 765_806),
+            pid: 765_706,
+            windowId: 765_806,
+            to: workspaceId
+        )
+        let node = try XCTUnwrap(controller.niriEngine?.addWindow(
+            token: token,
+            to: workspaceId,
+            afterSelection: nil
+        ))
+        node.frame = targetFrame
+        node.renderedFrame = targetFrame
+        let blocker = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        controller.layoutRefreshController.layoutState.activeRefreshTask = blocker
+        controller.layoutRefreshController.layoutState.activeRefresh = .init(
+            kind: .immediateRelayout,
+            reason: .layoutCommand,
+            affectedWorkspaceIds: [workspaceId]
+        )
+        defer {
+            blocker.cancel()
+            controller.layoutRefreshController.layoutState.activeRefreshTask = nil
+            controller.layoutRefreshController.layoutState.activeRefresh = nil
+            controller.layoutRefreshController.layoutState.pendingRefresh = nil
+        }
+
+        controller.mouseEventHandler.dispatchMouseMoved(
+            at: targetFrame.center,
+            modifiersRawValue: CGEventFlags.maskAlternate.rawValue
+        )
+        XCTAssertTrue(focusedTokens.isEmpty, "Focus lock modifier held should suppress focus-follows-mouse")
+
+        controller.mouseEventHandler.dispatchMouseMoved(at: targetFrame.center, modifiersRawValue: 0)
+        XCTAssertEqual(focusedTokens.last, token, "Releasing the modifier should restore focus-follows-mouse")
+    }
+
+    @MainActor
     func testDwindleFocusFollowsMouseDispatchFocusesHoveredWindowImmediately() throws {
         var focusedTokens: [WindowToken] = []
         let settings = Self.settingsStore()
@@ -642,6 +707,68 @@ final class RuntimeArchitectureTests: XCTestCase {
         XCTAssertEqual(focusedTokens.last, token)
         XCTAssertNil(controller.layoutRefreshController.layoutState.pendingRefresh)
         XCTAssertEqual(controller.intentLedger.activeManagedRequest?.origin, .pointerHover)
+    }
+
+    @MainActor
+    func testFocusLockModifierSuppressesDwindleFocusFollowsMouseWhileHeld() throws {
+        var focusedTokens: [WindowToken] = []
+        let settings = Self.settingsStore()
+        settings.workspaceConfigurations = settings.workspaceConfigurations.map {
+            $0.name == "1" ? $0.with(layoutType: .dwindle) : $0
+        }
+        settings.focusLockModifier = .option
+        let controller = WMController(
+            settings: settings,
+            windowFocusOperations: WindowFocusOperations(
+                activateApp: { _ in },
+                focusSpecificWindow: { pid, windowId, _ in
+                    focusedTokens.append(WindowToken(pid: pid, windowId: Int(windowId)))
+                },
+                raiseWindow: { _ in }
+            )
+        )
+        let workspaceId = try XCTUnwrap(controller.workspaceManager.workspaceId(for: "1", createIfMissing: true))
+        _ = controller.workspaceManager.focusWorkspace(named: "1")
+        controller.setFocusFollowsMouse(true)
+        let engine = DwindleLayoutEngine()
+        engine.animationClock = controller.animationClock
+        controller.dwindleEngine = engine
+        let monitor = try XCTUnwrap(controller.workspaceManager.monitor(for: workspaceId))
+        let token = controller.workspaceManager.addWindow(
+            AXWindowRef(element: AXUIElementCreateApplication(765_707), windowId: 765_807),
+            pid: 765_707,
+            windowId: 765_807,
+            to: workspaceId
+        )
+        _ = engine.addWindow(token: token, to: workspaceId, activeWindowFrame: nil)
+        let frames = engine.calculateLayout(for: workspaceId, screen: monitor.visibleFrame)
+        let targetFrame = try XCTUnwrap(frames[token])
+        let blocker = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        controller.layoutRefreshController.layoutState.activeRefreshTask = blocker
+        controller.layoutRefreshController.layoutState.activeRefresh = .init(
+            kind: .immediateRelayout,
+            reason: .layoutCommand,
+            affectedWorkspaceIds: [workspaceId]
+        )
+        defer {
+            blocker.cancel()
+            controller.layoutRefreshController.layoutState.activeRefreshTask = nil
+            controller.layoutRefreshController.layoutState.activeRefresh = nil
+            controller.layoutRefreshController.layoutState.pendingRefresh = nil
+        }
+
+        controller.mouseEventHandler.dispatchMouseMoved(
+            at: targetFrame.center,
+            modifiersRawValue: CGEventFlags.maskAlternate.rawValue
+        )
+        XCTAssertTrue(focusedTokens.isEmpty, "Focus lock modifier held should suppress Dwindle focus-follows-mouse")
+
+        controller.mouseEventHandler.dispatchMouseMoved(at: targetFrame.center, modifiersRawValue: 0)
+        XCTAssertEqual(focusedTokens.last, token, "Releasing the modifier should restore Dwindle focus-follows-mouse")
     }
 
     @MainActor
