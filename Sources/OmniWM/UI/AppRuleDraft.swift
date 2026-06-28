@@ -26,7 +26,6 @@ struct AppRuleDraft: Identifiable, Equatable {
     let id: UUID
     var bundleId: String
     var layoutAction: WindowRuleLayoutAction
-    var usesLegacyAlwaysFloat: Bool
     var assignToWorkspaceEnabled: Bool
     var assignToWorkspace: String
     var minWidthEnabled: Bool
@@ -47,7 +46,6 @@ struct AppRuleDraft: Identifiable, Equatable {
         self.id = id
         self.bundleId = bundleId
         layoutAction = .auto
-        usesLegacyAlwaysFloat = false
         assignToWorkspaceEnabled = false
         assignToWorkspace = ""
         minWidthEnabled = false
@@ -69,7 +67,6 @@ struct AppRuleDraft: Identifiable, Equatable {
         id = rule.id
         bundleId = rule.bundleId
         layoutAction = rule.effectiveLayoutAction
-        usesLegacyAlwaysFloat = rule.alwaysFloat == true && rule.layout == nil
         assignToWorkspaceEnabled = rule.assignToWorkspace != nil
         assignToWorkspace = rule.assignToWorkspace ?? ""
         minWidthEnabled = rule.minWidth != nil
@@ -118,17 +115,52 @@ struct AppRuleDraft: Identifiable, Equatable {
         return draft
     }
 
-    var hasActiveAdvancedMatchers: Bool {
-        makeRule().hasAdvancedMatchers
+    var hasNarrowingMatchers: Bool {
+        titleMatcherMode != .none || axRoleEnabled || axSubroleEnabled
     }
 
     var hasAnyRule: Bool {
         makeRule().hasAnyRule
     }
 
+    var bundleIdError: String? {
+        AppRuleDraftValidation.bundleIdError(for: bundleId)
+    }
+
+    var titleRegexError: String? {
+        guard titleMatcherMode == .regex else { return nil }
+        return AppRuleDraftValidation.titleRegexError(for: titleRegex)
+    }
+
+    var identifierHint: String? {
+        guard hasAnyRule, !makeRule().hasIdentifyingMatcher else { return nil }
+        return "Add a bundle ID, app name, or title — AX role/subrole alone match too broadly."
+    }
+
+    var minSizeError: String? {
+        if minWidthEnabled, !(minWidth.isFinite && minWidth > 0) {
+            return "Minimum width must be a positive number."
+        }
+        if minHeightEnabled, !(minHeight.isFinite && minHeight > 0) {
+            return "Minimum height must be a positive number."
+        }
+        return nil
+    }
+
+    var effectHint: String? {
+        let rule = makeRule()
+        guard rule.hasIdentifyingMatcher, !rule.hasEffect else { return nil }
+        return "This rule matches windows but has no effect — set a layout, workspace, or minimum size."
+    }
+
+    var isValid: Bool {
+        let rule = makeRule()
+        return bundleIdError == nil && titleRegexError == nil && minSizeError == nil
+            && rule.hasIdentifyingMatcher && rule.hasEffect
+    }
+
     func makeRule(id: UUID? = nil) -> AppRule {
-        let preserveLegacyAlwaysFloat = usesLegacyAlwaysFloat && layoutAction == .float
-        return AppRule(
+        AppRule(
             id: id ?? self.id,
             bundleId: bundleId.trimmingCharacters(in: .whitespacesAndNewlines),
             appNameSubstring: appNameMatcherEnabled ? appNameSubstring.trimmedNonEmpty : nil,
@@ -136,8 +168,7 @@ struct AppRuleDraft: Identifiable, Equatable {
             titleRegex: titleMatcherMode == .regex ? titleRegex.trimmedNonEmpty : nil,
             axRole: axRoleEnabled ? axRole.trimmedNonEmpty : nil,
             axSubrole: axSubroleEnabled ? axSubrole.trimmedNonEmpty : nil,
-            alwaysFloat: preserveLegacyAlwaysFloat ? true : nil,
-            layout: preserveLegacyAlwaysFloat ? nil : (layoutAction == .auto ? nil : layoutAction),
+            layout: layoutAction == .auto ? nil : layoutAction,
             assignToWorkspace: assignToWorkspaceEnabled ? assignToWorkspace.trimmedNonEmpty : nil,
             minWidth: minWidthEnabled ? minWidth : nil,
             minHeight: minHeightEnabled ? minHeight : nil

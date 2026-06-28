@@ -1,0 +1,540 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2026 BarutSRB — https://github.com/BarutSRB/OmniWM
+
+import SwiftUI
+
+struct RunningAppInfo: Identifiable {
+    let id: String
+    let bundleId: String?
+    let appName: String
+    let icon: NSImage?
+    let windowSize: CGSize
+}
+
+struct AppRuleDetailView: View {
+    @Binding var rule: AppRule
+    let workspaceNames: [String]
+    let controller: WMController
+    let editorState: AppRulesEditorState
+    let onCreateRuleFromSnapshot: (WindowDecisionDebugSnapshot) -> Void
+    let onDelete: () -> Void
+
+    @State private var draft: AppRuleDraft
+    @State private var isAdvancedMatchersExpanded: Bool
+
+    init(
+        rule: Binding<AppRule>,
+        workspaceNames: [String],
+        controller: WMController,
+        editorState: AppRulesEditorState,
+        onCreateRuleFromSnapshot: @escaping (WindowDecisionDebugSnapshot) -> Void,
+        onDelete: @escaping () -> Void
+    ) {
+        _rule = rule
+        self.workspaceNames = workspaceNames
+        self.controller = controller
+        self.editorState = editorState
+        self.onCreateRuleFromSnapshot = onCreateRuleFromSnapshot
+        self.onDelete = onDelete
+
+        let initialRule = rule.wrappedValue
+        _draft = State(initialValue: AppRuleDraft(rule: initialRule))
+        _isAdvancedMatchersExpanded = State(
+            initialValue: AppRuleDraft(rule: initialRule).hasNarrowingMatchers ||
+                controller.windowRuleEngine.invalidRegexMessagesByRuleId[initialRule.id] != nil
+        )
+    }
+
+    private var isDirty: Bool {
+        draft.makeRule(id: rule.id) != rule
+    }
+
+    var body: some View {
+        Form {
+            RuleApplicationSection(draft: $draft, controller: controller)
+            RuleWindowBehaviorSection(draft: $draft, workspaceNames: workspaceNames)
+            RuleMinimumSizeSection(draft: $draft)
+
+            Section {
+                DisclosureGroup("Advanced Matchers", isExpanded: $isAdvancedMatchersExpanded) {
+                    AdvancedMatchersEditor(draft: $draft, regexError: titleRegexError)
+                }
+            }
+
+            if let message = draft.identifierHint ?? draft.effectHint {
+                Section {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Section {
+                FocusedWindowInspectorView(
+                    controller: controller,
+                    onCreateRuleFromSnapshot: onCreateRuleFromSnapshot
+                )
+            }
+
+            Section {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete Rule", systemImage: "trash")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .safeAreaInset(edge: .bottom) { saveBar }
+        .onChange(of: draft) { _, _ in editorState.isDirty = isDirty }
+        .onChange(of: rule) { oldRule, newRule in
+            if draft.makeRule(id: oldRule.id) == oldRule {
+                draft = AppRuleDraft(rule: newRule)
+            }
+            editorState.isDirty = isDirty
+        }
+        .onDisappear { editorState.isDirty = false }
+    }
+
+    private var saveBar: some View {
+        HStack(spacing: 12) {
+            if isDirty {
+                Text("Unsaved changes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Revert") {
+                draft = AppRuleDraft(rule: rule)
+                editorState.isDirty = false
+            }
+            .disabled(!isDirty)
+            Button("Save") {
+                rule = draft.makeRule(id: rule.id)
+                controller.updateAppRules()
+                editorState.isDirty = false
+            }
+            .keyboardShortcut("s", modifiers: .command)
+            .buttonStyle(.borderedProminent)
+            .disabled(!isDirty || !draft.isValid)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private var titleRegexError: String? {
+        guard draft.titleMatcherMode == .regex else { return nil }
+        return controller.windowRuleEngine.invalidRegexMessagesByRuleId[rule.id] ?? draft.titleRegexError
+    }
+}
+
+struct AppRuleAddSheet: View {
+    let workspaceNames: [String]
+    let controller: WMController
+    let onSave: (AppRule) -> Void
+    let onCancel: () -> Void
+
+    @State private var draft: AppRuleDraft
+    @State private var isAdvancedMatchersExpanded: Bool
+
+    init(
+        initialDraft: AppRuleDraft,
+        workspaceNames: [String],
+        controller: WMController,
+        onSave: @escaping (AppRule) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.workspaceNames = workspaceNames
+        self.controller = controller
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _draft = State(initialValue: initialDraft)
+        _isAdvancedMatchersExpanded = State(initialValue: initialDraft.hasNarrowingMatchers)
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Add App Rule")
+                .font(.headline)
+
+            Form {
+                RuleApplicationSection(draft: $draft, controller: controller)
+                RuleWindowBehaviorSection(draft: $draft, workspaceNames: workspaceNames)
+                RuleMinimumSizeSection(draft: $draft)
+
+                Section {
+                    DisclosureGroup("Advanced Matchers", isExpanded: $isAdvancedMatchersExpanded) {
+                        AdvancedMatchersEditor(draft: $draft, regexError: draft.titleRegexError)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            if let message = draft.effectHint {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack {
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Add") {
+                    onSave(draft.makeRule())
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!draft.isValid)
+            }
+        }
+        .padding()
+        .frame(minWidth: 520)
+    }
+}
+
+struct RuleApplicationSection: View {
+    @Binding var draft: AppRuleDraft
+    let controller: WMController
+
+    @State private var runningApps: [RunningAppInfo] = []
+    @State private var isPickerExpanded = false
+    @State private var selectedAppInfo: RunningAppInfo?
+
+    var body: some View {
+        Section("Application") {
+            TextField("Bundle ID", text: $draft.bundleId)
+                .textFieldStyle(.roundedBorder)
+            if let error = draft.bundleIdError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            DisclosureGroup("Pick from running apps", isExpanded: $isPickerExpanded) {
+                if runningApps.isEmpty {
+                    SettingsCaption("No apps with windows found")
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(runningApps) { app in
+                                RunningAppRow(
+                                    app: app,
+                                    isSelected: selectedAppInfo?.id == app.id,
+                                    onSelect: { selectApp(app) }
+                                )
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 200)
+                }
+            }
+            .onAppear {
+                runningApps = controller.runningAppsWithWindows()
+                isPickerExpanded = draft.bundleId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+
+            if let appInfo = selectedAppInfo {
+                Button {
+                    useCurrentWindowSize(appInfo.windowSize)
+                } label: {
+                    Label(
+                        "Use current size: \(Int(appInfo.windowSize.width)) × \(Int(appInfo.windowSize.height)) px",
+                        systemImage: "arrow.down.doc"
+                    )
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Toggle("Also match by app name", isOn: $draft.appNameMatcherEnabled)
+            if draft.appNameMatcherEnabled {
+                TextField("App name contains, e.g. Preview", text: $draft.appNameSubstring)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            SettingsCaption(
+                "Bundle ID is the app's runtime identifier (e.g. com.apple.finder). Some apps have none — "
+                    + "leave it blank and match by app name or title instead. A codesign identifier won't match."
+            )
+
+            if let identifierHint = draft.identifierHint {
+                Text(identifierHint)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func selectApp(_ app: RunningAppInfo) {
+        selectedAppInfo = app
+        if let bundleId = app.bundleId {
+            draft.bundleId = bundleId
+        } else {
+            draft.bundleId = ""
+            draft.appNameMatcherEnabled = true
+            draft.appNameSubstring = app.appName
+        }
+        isPickerExpanded = false
+    }
+
+    private func useCurrentWindowSize(_ size: CGSize) {
+        draft.minWidth = size.width
+        draft.minHeight = size.height
+        draft.minWidthEnabled = true
+        draft.minHeightEnabled = true
+    }
+}
+
+struct RuleWindowBehaviorSection: View {
+    @Binding var draft: AppRuleDraft
+    let workspaceNames: [String]
+
+    var body: some View {
+        Section("Window Behavior") {
+            Picker("Layout", selection: $draft.layoutAction) {
+                ForEach(WindowRuleLayoutAction.allCases) { action in
+                    Text(action.displayName).tag(action)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Toggle("Assign to Workspace", isOn: $draft.assignToWorkspaceEnabled)
+                .onChange(of: draft.assignToWorkspaceEnabled) { _, enabled in
+                    guard enabled else { return }
+                    seedWorkspaceIfNeeded()
+                }
+
+            if draft.assignToWorkspaceEnabled {
+                Picker("Workspace", selection: $draft.assignToWorkspace) {
+                    ForEach(workspaceNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                    if isWorkspaceMissing {
+                        Text("\(draft.assignToWorkspace) (missing)").tag(draft.assignToWorkspace)
+                    }
+                }
+                .disabled(workspaceNames.isEmpty)
+
+                if workspaceNames.isEmpty {
+                    SettingsCaption("No workspaces configured. Add workspaces in Settings.")
+                } else if isWorkspaceMissing {
+                    Text("Workspace \"\(draft.assignToWorkspace)\" no longer exists. Pick another.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    private var isWorkspaceMissing: Bool {
+        draft.assignToWorkspaceEnabled &&
+            !draft.assignToWorkspace.isEmpty &&
+            !workspaceNames.contains(draft.assignToWorkspace)
+    }
+
+    private func seedWorkspaceIfNeeded() {
+        if draft.assignToWorkspace.isEmpty, let first = workspaceNames.first {
+            draft.assignToWorkspace = first
+        }
+    }
+}
+
+struct RuleMinimumSizeSection: View {
+    @Binding var draft: AppRuleDraft
+
+    var body: some View {
+        Section("Minimum Size (Layout Constraint)") {
+            Toggle("Minimum Width", isOn: $draft.minWidthEnabled)
+            if draft.minWidthEnabled {
+                HStack {
+                    TextField("Width", value: $draft.minWidth, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                    Text("px")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Toggle("Minimum Height", isOn: $draft.minHeightEnabled)
+            if draft.minHeightEnabled {
+                HStack {
+                    TextField("Height", value: $draft.minHeight, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                    Text("px")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let error = draft.minSizeError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            SettingsCaption("Prevents the layout engine from sizing the window smaller than these values.")
+        }
+    }
+}
+
+struct AdvancedMatchersEditor: View {
+    @Binding var draft: AppRuleDraft
+    let regexError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SettingsCaption("Narrow a rule to specific windows within an app.")
+
+            Picker("Title Match", selection: $draft.titleMatcherMode) {
+                ForEach(TitleMatcherMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+
+            switch draft.titleMatcherMode {
+            case .none:
+                EmptyView()
+            case .substring:
+                TextField("Title contains", text: $draft.titleSubstring)
+                    .textFieldStyle(.roundedBorder)
+            case .regex:
+                TextField("Title regex", text: $draft.titleRegex)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                if let regexError {
+                    Text("Title regex is invalid: \(regexError)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Toggle("AX Role", isOn: $draft.axRoleEnabled)
+            if draft.axRoleEnabled {
+                TextField("e.g. AXWindow", text: $draft.axRole)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+            }
+
+            Toggle("AX Subrole", isOn: $draft.axSubroleEnabled)
+            if draft.axSubroleEnabled {
+                TextField("e.g. AXStandardWindow", text: $draft.axSubrole)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct FocusedWindowInspectorView: View {
+    let controller: WMController
+    let onCreateRuleFromSnapshot: (WindowDecisionDebugSnapshot) -> Void
+
+    @State private var snapshot: WindowDecisionDebugSnapshot?
+    @State private var isTroubleshootingExpanded = false
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Focused Window Inspector")
+                        .font(.headline)
+                    Spacer()
+                    Button("Refresh") {
+                        refreshSnapshot()
+                    }
+                }
+
+                if let snapshot {
+                    Button("New Rule from Focused Window") {
+                        onCreateRuleFromSnapshot(snapshot)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(AppRuleDraft.guided(from: snapshot) == nil)
+
+                    DisclosureGroup("Advanced / Troubleshooting", isExpanded: $isTroubleshootingExpanded) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ScrollView(.vertical) {
+                                Text(snapshot.formattedDump())
+                                    .font(.system(.caption, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(minHeight: 140, maxHeight: 220)
+
+                            Button("Copy Debug Dump") {
+                                controller.copyDebugDump(snapshot)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(.top, 4)
+                    }
+                } else {
+                    SettingsCaption("No focused window is available for inspection.")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                refreshSnapshot()
+            }
+        }
+    }
+
+    private func refreshSnapshot() {
+        snapshot = controller.focusedWindowDecisionDebugSnapshot()
+    }
+}
+
+struct RunningAppRow: View {
+    let app: RunningAppInfo
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                if let icon = app.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: "app")
+                        .frame(width: 20, height: 20)
+                        .accessibilityHidden(true)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(app.appName)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    Text(app.bundleId ?? "No bundle ID")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("\(Int(app.windowSize.width))×\(Int(app.windowSize.height))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(app.appName), \(app.bundleId ?? "no bundle ID")")
+        .accessibilityValue("\(Int(app.windowSize.width)) by \(Int(app.windowSize.height)) pixels")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}

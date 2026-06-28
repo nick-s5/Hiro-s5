@@ -319,7 +319,7 @@ final class WindowRuleEngine {
     func rebuild(rules: [AppRule]) {
         var invalidRegexMessagesByRuleId: [UUID: String] = [:]
         compiledUserRules = rules.enumerated().compactMap { index, rule in
-            guard rule.hasAnyRule, rule.hasIdentifyingMatcher else { return nil }
+            guard rule.hasIdentifyingMatcher, rule.hasEffect else { return nil }
             return compile(
                 rule: rule,
                 source: .user,

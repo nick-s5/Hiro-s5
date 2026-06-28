@@ -2350,6 +2350,13 @@ public struct IPCRuleSnapshot: Codable, Equatable, Sendable {
     public let specificity: Int
     public let isValid: Bool
     public let invalidRegexMessage: String?
+    public let validationMessages: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, position, bundleId, appNameSubstring, titleSubstring, titleRegex, axRole, axSubrole
+        case layout, assignToWorkspace, minWidth, minHeight, specificity, isValid
+        case invalidRegexMessage, validationMessages
+    }
 
     public init(
         id: String,
@@ -2366,7 +2373,8 @@ public struct IPCRuleSnapshot: Codable, Equatable, Sendable {
         minHeight: Double? = nil,
         specificity: Int,
         isValid: Bool,
-        invalidRegexMessage: String? = nil
+        invalidRegexMessage: String? = nil,
+        validationMessages: [String] = []
     ) {
         self.id = id
         self.position = position
@@ -2383,6 +2391,27 @@ public struct IPCRuleSnapshot: Codable, Equatable, Sendable {
         self.specificity = specificity
         self.isValid = isValid
         self.invalidRegexMessage = invalidRegexMessage
+        self.validationMessages = validationMessages
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        position = try container.decode(Int.self, forKey: .position)
+        bundleId = try container.decode(String.self, forKey: .bundleId)
+        appNameSubstring = try container.decodeIfPresent(String.self, forKey: .appNameSubstring)
+        titleSubstring = try container.decodeIfPresent(String.self, forKey: .titleSubstring)
+        titleRegex = try container.decodeIfPresent(String.self, forKey: .titleRegex)
+        axRole = try container.decodeIfPresent(String.self, forKey: .axRole)
+        axSubrole = try container.decodeIfPresent(String.self, forKey: .axSubrole)
+        layout = try container.decode(IPCRuleLayout.self, forKey: .layout)
+        assignToWorkspace = try container.decodeIfPresent(String.self, forKey: .assignToWorkspace)
+        minWidth = try container.decodeIfPresent(Double.self, forKey: .minWidth)
+        minHeight = try container.decodeIfPresent(Double.self, forKey: .minHeight)
+        specificity = try container.decode(Int.self, forKey: .specificity)
+        isValid = try container.decode(Bool.self, forKey: .isValid)
+        invalidRegexMessage = try container.decodeIfPresent(String.self, forKey: .invalidRegexMessage)
+        validationMessages = try container.decodeIfPresent([String].self, forKey: .validationMessages) ?? []
     }
 }
 

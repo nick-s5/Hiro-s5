@@ -351,7 +351,7 @@ enum CLIRenderer {
                 rule.assignToWorkspace ?? "-",
                 rule.titleRegex ?? "-",
                 String(rule.specificity),
-                boolDescription(rule.isValid)
+                ruleValidityDescription(rule)
             ]
         }
 
@@ -360,6 +360,13 @@ enum CLIRenderer {
             rows: rows,
             format: format
         )
+    }
+
+    private static func ruleValidityDescription(_ rule: IPCRuleSnapshot) -> String {
+        if rule.isValid { return boolDescription(true) }
+        return rule.validationMessages.isEmpty
+            ? boolDescription(false)
+            : "no: " + rule.validationMessages.joined(separator: "; ")
     }
 
     private static func formattedQueries(_ payload: IPCQueriesQueryResult, format: CLIOutputFormat) -> String {

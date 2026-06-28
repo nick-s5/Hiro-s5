@@ -166,4 +166,24 @@ final class WindowRuleEngineTests: XCTestCase {
         let snapshot = IPCRuleProjection.snapshot(from: rule, position: 1, invalidRegexMessagesByRuleId: [:])
         XCTAssertFalse(snapshot.isValid)
     }
+
+    func testEffectlessRuleDoesNotShadowEffectiveRule() {
+        let engine = WindowRuleEngine()
+        // More specific (bundle + app name) but effect-less: must be dropped, not shadow.
+        let effectless = AppRule(bundleId: "com.test.app", appNameSubstring: "Test")
+        // Less specific (bundle only) but floats.
+        let effective = AppRule(bundleId: "com.test.app", layout: .float)
+        engine.rebuild(rules: [effectless, effective])
+
+        let decision = evaluate(engine, facts(appName: "Test", bundleId: "com.test.app"))
+        XCTAssertEqual(decision.disposition, .floating)
+        XCTAssertEqual(decision.source, .userRule(effective.id))
+    }
+
+    func testEffectlessRuleSnapshotIsInvalidWithMessage() {
+        let rule = AppRule(bundleId: "com.test.app", appNameSubstring: "Test")
+        let snapshot = IPCRuleProjection.snapshot(from: rule, position: 1, invalidRegexMessagesByRuleId: [:])
+        XCTAssertFalse(snapshot.isValid)
+        XCTAssertFalse(snapshot.validationMessages.isEmpty)
+    }
 }

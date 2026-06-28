@@ -28,8 +28,15 @@ enum IPCRuleProjection {
         let definition = definition(from: rule)
         let validation = IPCRuleValidator.validate(definition)
         let invalidRegexMessage = invalidRegexMessagesByRuleId[rule.id] ?? validation.invalidRegexMessage
-        let isValid = validation.bundleIdError == nil && invalidRegexMessage == nil
-            && validation.identifierError == nil
+        let validationMessages = [
+            validation.bundleIdError,
+            invalidRegexMessage,
+            validation.identifierError,
+            validation.titleMatcherError,
+            validation.effectError,
+            validation.minSizeError
+        ].compactMap { $0 }
+        let isValid = validationMessages.isEmpty
 
         return IPCRuleSnapshot(
             id: rule.id.uuidString,
@@ -46,7 +53,8 @@ enum IPCRuleProjection {
             minHeight: definition.minHeight,
             specificity: rule.specificity,
             isValid: isValid,
-            invalidRegexMessage: invalidRegexMessage
+            invalidRegexMessage: invalidRegexMessage,
+            validationMessages: validationMessages
         )
     }
 
@@ -77,8 +85,6 @@ enum IPCRuleProjection {
             titleRegex: normalized.titleRegex,
             axRole: normalized.axRole,
             axSubrole: normalized.axSubrole,
-            alwaysFloat: nil,
-            manage: nil,
             layout: windowRuleLayout(from: normalized.layout),
             assignToWorkspace: normalized.assignToWorkspace,
             minWidth: normalized.minWidth,
