@@ -70,7 +70,21 @@ verify_ghostty() {
 
   [ -f "$OMNIWM_GHOSTTY_ARCHIVE_PATH" ] || fail "missing Ghostty archive at $OMNIWM_GHOSTTY_ARCHIVE_PATH"
 
-  if ! lipo "$OMNIWM_GHOSTTY_ARCHIVE_PATH" -verify_arch arm64 x86_64 >/dev/null 2>&1; then
+  if ! archs="$(lipo "$OMNIWM_GHOSTTY_ARCHIVE_PATH" -archs 2>/dev/null)"; then
+    lipo -info "$OMNIWM_GHOSTTY_ARCHIVE_PATH" >&2 || true
+    fail "Ghostty archive must include both arm64 and x86_64"
+  fi
+
+  missing_arch=false
+  case " $archs " in
+    *" arm64 "*) ;;
+    *) missing_arch=true ;;
+  esac
+  case " $archs " in
+    *" x86_64 "*) ;;
+    *) missing_arch=true ;;
+  esac
+  if [ "$missing_arch" = true ]; then
     lipo -info "$OMNIWM_GHOSTTY_ARCHIVE_PATH" >&2 || true
     fail "Ghostty archive must include both arm64 and x86_64"
   fi
