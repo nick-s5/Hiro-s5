@@ -120,6 +120,7 @@ final class ReportIssueViewModel {
         [title, actual, expected, repro, affectedApps, regressionVersion].contains { !$0.isEmpty }
             || category != .unspecified
             || regression != .unknown
+            || polishedBody?.isEmpty == false
     }
 
     var submitRequirementHint: String? {
@@ -237,6 +238,7 @@ final class ReportIssueViewModel {
         category = IssueCategory(rawValue: draft.category) ?? .unspecified
         layout = LayoutType(rawValue: draft.layout)?.normalizedForReport ?? defaultLayout
         regression = IssueRegression(rawValue: draft.regression) ?? .unknown
+        polishedBody = draft.polishedBody.isEmpty ? nil : draft.polishedBody
     }
 
     private func handleEdit(_ oldValue: String, _ newValue: String) {
@@ -272,7 +274,8 @@ final class ReportIssueViewModel {
             category: category.rawValue,
             layout: layout.rawValue,
             regression: regression.rawValue,
-            regressionVersion: regressionVersion
+            regressionVersion: regressionVersion,
+            polishedBody: polishedBody ?? ""
         )
     }
 

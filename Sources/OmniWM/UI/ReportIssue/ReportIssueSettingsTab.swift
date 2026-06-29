@@ -9,6 +9,7 @@ struct ReportIssueSettingsTab: View {
     @State private var hasRecentTrace = false
     @State private var traceReloadToken = 0
     @State private var showDiscardConfirm = false
+    @State private var traceStatus: DiagnosticsActionStatus = .idle
     @FocusState private var titleFocused: Bool
 
     let controller: WMController
@@ -19,7 +20,8 @@ struct ReportIssueSettingsTab: View {
         crashPrefill = controller.pendingCrashReport
         let settings = controller.settings
         _model = State(initialValue: ReportIssueViewModel(
-            defaultLayout: settings.defaultLayoutType,
+            defaultLayout: controller.activeWorkspace().map { settings.layoutType(for: $0.name) }
+                ?? settings.defaultLayoutType,
             makeDiagnosticsBundle: { try controller.writeDiagnosticsBundle() },
             hotkeyContextProvider: { text in
                 IssueHotkeyContext.resolve(text: text, bindings: settings.hotkeyBindings)
@@ -82,6 +84,7 @@ struct ReportIssueSettingsTab: View {
                         + "A trace makes bugs far easier to fix, but it's optional."
                 )
             }
+            statusLabel(traceStatus)
         }
     }
 
@@ -328,16 +331,49 @@ extension ReportIssueSettingsTab {
     }
 
     private func startRecording() {
-        _ = controller.toggleTraceCaptureForUI(desiredState: .active)
+        switch controller.toggleTraceCaptureForUI(desiredState: .active) {
+        case .started:
+            traceStatus = .success("Recording started")
+        case .noChange:
+            traceStatus = .failure("A recording is already running")
+        case .stopped,
+             .writeFailed:
+            traceStatus = .failure("Unexpected recording state")
+        }
     }
 
     private func stopRecording() {
-        _ = controller.toggleTraceCaptureForUI(desiredState: .inactive)
+        switch controller.toggleTraceCaptureForUI(desiredState: .inactive) {
+        case .stopped:
+            traceStatus = .idle
+        case let .writeFailed(reason):
+            traceStatus = .failure("Failed to write the recording: \(reason)")
+        case .noChange:
+            traceStatus = .failure("No recording is running")
+        case .started:
+            traceStatus = .failure("Unexpected recording state")
+        }
         traceReloadToken += 1
     }
 
+    @ViewBuilder
+    private func statusLabel(_ status: DiagnosticsActionStatus) -> some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case let .success(message):
+            Label(message, systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        case let .failure(message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
     private func refreshTraceState() async {
-        let directory = OmniWMStoragePaths.live.diagnosticsDirectory
+        let directory = controller.diagnosticsDirectory
         let files = await Task.detached { DiagnosticsFileScanner.scan(directory) }.value
         hasRecentTrace = files.contains {
             $0.name.hasPrefix("omniwm-trace-") && !$0.name.hasSuffix(".partial.log")

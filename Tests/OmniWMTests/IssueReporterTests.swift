@@ -197,6 +197,42 @@ final class IssueReporterTests: XCTestCase {
         XCTAssertFalse(model.hasDraftContent)
     }
 
+    func testIssueDraftRoundTripsThroughRuntimeStateStore() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("omniwm-issue-draft-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let draft = IssueDraft(
+            title: "Bug",
+            actual: "It crashed",
+            expected: "No crash",
+            repro: "Open app",
+            affectedApps: "Safari",
+            category: IssueCategory.crash.rawValue,
+            layout: LayoutType.dwindle.rawValue,
+            regression: IssueRegression.yes.rawValue,
+            regressionVersion: "0.4.6",
+            polishedBody: "## What happened\nIt crashed"
+        )
+        let writer = RuntimeStateStore(directory: directory, deferSaves: false)
+        writer.issueDraft = draft
+        let reader = RuntimeStateStore(directory: directory, deferSaves: false)
+        XCTAssertEqual(reader.issueDraft, draft)
+    }
+
+    func testAppliedRewriteSurvivesDraftReload() async {
+        var saved: IssueDraft?
+        let engine = FakeIssueEngine(rewriteResult: .success(RewrittenIssue(title: "Clean title", body: "Clean body")))
+        let model = ReportIssueViewModel(engine: engine, saveDraft: { saved = $0 })
+        model.title = "rough title"
+        model.actual = "rough body"
+        await model.requestRewrite()
+        model.applyRewrite()
+        let reloaded = ReportIssueViewModel(engine: FakeIssueEngine(), loadDraft: { saved })
+        XCTAssertEqual(reloaded.polishedBody, "Clean body")
+        XCTAssertEqual(reloaded.submissionBody, "Clean body")
+        XCTAssertEqual(reloaded.title, "Clean title")
+    }
+
     func testAssembleSubstitutesNotProvidedForEmptyFields() {
         let body = IssueTemplate.assemble(
             summary: "It crashed on launch",

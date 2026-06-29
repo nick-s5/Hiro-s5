@@ -1116,12 +1116,21 @@ final class MenuActionRowView: NSView {
     override func mouseUp(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
         if bounds.contains(location) {
-            if let menu = enclosingMenuItem?.menu {
-                menu.cancelTracking()
-            }
-            DispatchQueue.main.async { [weak self] in
-                self?.action()
-            }
+            activate()
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        activate()
+        return true
+    }
+
+    private func activate() {
+        if let menu = enclosingMenuItem?.menu {
+            menu.cancelTracking()
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.action()
         }
     }
 

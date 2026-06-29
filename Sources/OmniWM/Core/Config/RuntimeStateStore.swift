@@ -40,6 +40,7 @@ struct IssueDraft: Codable, Equatable {
     var layout: String = ""
     var regression: String = ""
     var regressionVersion: String = ""
+    var polishedBody: String = ""
 }
 
 struct RuntimeState: Codable, Equatable {
