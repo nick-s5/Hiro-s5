@@ -146,8 +146,10 @@ enum SystemHyperTrigger: Equatable, Hashable {
         UInt32(kVK_CapsLock),
         UInt32(kVK_F13), UInt32(kVK_F14), UInt32(kVK_F15), UInt32(kVK_F16),
         UInt32(kVK_F17), UInt32(kVK_F18), UInt32(kVK_F19), UInt32(kVK_F20),
-        UInt32(kVK_RightOption), UInt32(kVK_RightCommand),
-        UInt32(kVK_RightControl), UInt32(kVK_RightShift)
+        UInt32(kVK_Control), UInt32(kVK_RightControl),
+        UInt32(kVK_Option), UInt32(kVK_RightOption),
+        UInt32(kVK_Shift), UInt32(kVK_RightShift),
+        UInt32(kVK_Command), UInt32(kVK_RightCommand)
     ]
 
     static let selectableMouseButtons: [Int64] = [3, 4, 5]

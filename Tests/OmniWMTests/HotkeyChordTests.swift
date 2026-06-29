@@ -106,6 +106,10 @@ final class HotkeyChordTests: XCTestCase {
         XCTAssertEqual(SystemHyperTrigger.fromHumanReadable(""), SystemHyperTrigger.none)
         XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("Caps Lock"), .key(UInt32(kVK_CapsLock)))
         XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("F13"), .key(UInt32(kVK_F13)))
+        XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("Left Control"), .key(UInt32(kVK_Control)))
+        XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("Left Option"), .key(UInt32(kVK_Option)))
+        XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("Left Shift"), .key(UInt32(kVK_Shift)))
+        XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("Left Command"), .key(UInt32(kVK_Command)))
         XCTAssertEqual(SystemHyperTrigger.fromHumanReadable("MouseButton4"), .mouseButton(4))
         XCTAssertNil(SystemHyperTrigger.fromHumanReadable("A"))
         XCTAssertNil(SystemHyperTrigger.fromHumanReadable("Space"))
@@ -152,6 +156,29 @@ final class HotkeyChordTests: XCTestCase {
         XCTAssertEqual(trigger.handleKeyUp(UInt32(kVK_F13)), .suppress)
         XCTAssertFalse(trigger.isActive)
         XCTAssertEqual(trigger.handleKeyDown(UInt32(kVK_ANSI_A)), .passThrough)
+    }
+
+    func testSystemHyperTriggerSupportsLeftModifiers() {
+        let leftModifiers = [
+            UInt32(kVK_Control), UInt32(kVK_Option), UInt32(kVK_Shift), UInt32(kVK_Command)
+        ]
+        for keyCode in leftModifiers {
+            XCTAssertTrue(SystemHyperTrigger.selectableKeyCodes.contains(keyCode))
+            XCTAssertTrue(SystemHyperTrigger.key(keyCode).isSupported)
+        }
+    }
+
+    func testHyperTriggerStateMachineHandlesLeftModifierTrigger() {
+        var trigger = HyperTriggerStateMachine(trigger: .key(UInt32(kVK_Control)), capsLockRemapped: false)
+        let leftControlDown = CGEventFlags.maskControl.rawValue | UInt64(NX_DEVICELCTLKEYMASK)
+
+        XCTAssertEqual(
+            trigger.handleFlagsChanged(keyCode: UInt32(kVK_Control), rawFlags: leftControlDown),
+            .suppress
+        )
+        XCTAssertTrue(trigger.isActive)
+        XCTAssertEqual(trigger.handleFlagsChanged(keyCode: UInt32(kVK_Control), rawFlags: 0), .suppress)
+        XCTAssertFalse(trigger.isActive)
     }
 
     func testHyperTriggerStateMachineHandlesCapsLockRemap() {
