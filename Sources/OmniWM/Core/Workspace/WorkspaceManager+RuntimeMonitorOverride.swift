@@ -5,6 +5,10 @@ import Foundation
 
 extension WorkspaceManager {
     func applySettings() {
+        prepareDisplayProfileTransition(to: monitors)
+        appliedWorkspaceMonitorAssignments = effectiveWorkspaceMonitorAssignments(for: monitors)
+        appliedWorkspaceMonitorTargets = effectiveWorkspaceMonitorTargets(for: monitors)
+        appliedDisplayProfileID = settings.monitors.activeDisplayProfile(for: monitors)?.id
         invalidateSettingsProjectionCaches()
         let visibleWorkspacesBeforeClear = activeVisibleWorkspaceMap()
         let overriddenWorkspaceIds = Set(

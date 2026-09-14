@@ -19,6 +19,34 @@ final class MonitorConfigurationSettings {
         didSet { onChange?() }
     }
 
+    var displayProfiles: [DisplayProfile] = [] {
+        didSet { onChange?() }
+    }
+
+    var automaticProfilesEnabled = false {
+        didSet { onChange?() }
+    }
+
+    var selectedDisplayProfileID: UUID? {
+        didSet { onChange?() }
+    }
+
+    func activeDisplayProfile(for monitors: [Monitor]) -> DisplayProfile? {
+        DisplayProfileResolver.selectedProfile(
+            in: displayProfiles,
+            automatic: automaticProfilesEnabled,
+            selectedID: selectedDisplayProfileID,
+            monitors: monitors
+        )
+    }
+
+    func effectiveWorkspaceConfigurations(
+        _ configurations: [WorkspaceConfiguration],
+        for monitors: [Monitor]
+    ) -> [WorkspaceConfiguration] {
+        DisplayProfileResolver.applying(activeDisplayProfile(for: monitors), to: configurations)
+    }
+
     var orientationOverrides: [MonitorOrientationSettings] = [] {
         didSet { onChange?() }
     }
@@ -26,7 +54,10 @@ final class MonitorConfigurationSettings {
     func export() -> SettingsExport.Routing {
         SettingsExport.Routing(
             mode: routingMode,
-            arrangements: arrangements
+            arrangements: arrangements,
+            displayProfiles: displayProfiles,
+            automaticProfilesEnabled: automaticProfilesEnabled,
+            selectedDisplayProfileID: selectedDisplayProfileID
         )
     }
 

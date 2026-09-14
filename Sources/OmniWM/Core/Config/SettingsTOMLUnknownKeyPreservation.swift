@@ -166,6 +166,25 @@ extension TOMLNode {
             }
             return classified(matches, empty: .deleted)
         }
+        if arrayPath.hasPrefix("routing.displayProfiles["), arrayPath.hasSuffix("].assignments"),
+           case let .string(workspaceName) = schemaKnown["workspaceName"]
+        {
+            return classified(matchingIndices(in: nodes) { candidate in
+                candidate["workspaceName"] == .string(workspaceName)
+            }, empty: .deleted)
+        }
+        if arrayPath.hasPrefix("routing.displayProfiles["), arrayPath.hasSuffix("].requiredDisplays") {
+            return classified(matchingIndices(in: nodes) { candidate in
+                if case let .string(sourceUUID) = schemaKnown["displayUUID"],
+                   let canonicalSource = DisplayUUID.canonical(sourceUUID)
+                {
+                    guard case let .string(candidateUUID) = candidate["displayUUID"] else { return false }
+                    return DisplayUUID.canonical(candidateUUID) == canonicalSource
+                }
+                guard schemaKnown["displayId"] != nil, candidate["displayUUID"] == nil else { return false }
+                return candidate["displayId"] == schemaKnown["displayId"] && candidate["name"] == schemaKnown["name"]
+            }, empty: .deleted)
+        }
         if isMonitorIdentityArray(arrayPath), hasMonitorIdentity(schemaKnown) {
             return classified(monitorMatchingIndices(for: schemaKnown, in: nodes), empty: .deleted)
         }

@@ -21,12 +21,19 @@ extension WorkspaceManager {
             return monitorResolutionContext()
         }
         let sortedMonitors = Monitor.sortedByPosition(monitors)
+        var descriptions: [String: MonitorDescription] = [:]
+        for configuration in settings.monitors.effectiveWorkspaceConfigurations(
+            settings.workspaces.configurations,
+            for: monitors
+        ) {
+            descriptions[configuration.name] = configuration.monitorAssignment.toMonitorDescription()
+        }
         return MonitorResolutionContext(
             monitors: monitors,
             sortedMonitors: sortedMonitors,
             topologyProfile: TopologyProfile(sortedMonitors: sortedMonitors),
             configuredWorkspaceNames: configuredWorkspaceNameSet(),
-            monitorDescriptionByWorkspaceName: monitorDescriptionByWorkspaceName()
+            monitorDescriptionByWorkspaceName: descriptions
         )
     }
 }

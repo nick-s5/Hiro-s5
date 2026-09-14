@@ -90,6 +90,8 @@ struct MonitorSettingsTab: View {
                 isMonitorSetupPresented = true
             }
 
+            DisplayProfilesSection(settings: settings, controller: controller, monitors: sortedMonitors)
+
             Section("macOS Arrangement") {
                 if sortedMonitors.isEmpty {
                     Text("No monitors detected.")

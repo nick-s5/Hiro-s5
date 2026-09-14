@@ -79,6 +79,23 @@ struct SettingsExport: Equatable {
     struct Routing: Codable, Equatable {
         var mode: MonitorRoutingMode
         var arrangements: [MonitorArrangement]
+        var displayProfiles: [DisplayProfile] = []
+        var automaticProfilesEnabled = false
+        var selectedDisplayProfileID: UUID?
+
+        init(
+            mode: MonitorRoutingMode,
+            arrangements: [MonitorArrangement],
+            displayProfiles: [DisplayProfile] = [],
+            automaticProfilesEnabled: Bool = false,
+            selectedDisplayProfileID: UUID? = nil
+        ) {
+            self.mode = mode
+            self.arrangements = arrangements
+            self.displayProfiles = displayProfiles
+            self.automaticProfilesEnabled = automaticProfilesEnabled
+            self.selectedDisplayProfileID = selectedDisplayProfileID
+        }
     }
 
     struct Gaps: Codable, Equatable {
@@ -261,6 +278,20 @@ extension SettingsExport.MouseWarp {
 }
 
 extension SettingsExport.Routing {
+    private enum CodingKeys: String, CodingKey {
+        case mode, arrangements, displayProfiles, automaticProfilesEnabled, selectedDisplayProfileID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try container.decode(MonitorRoutingMode.self, forKey: .mode)
+        arrangements = try container.decode([MonitorArrangement].self, forKey: .arrangements)
+        displayProfiles = try container.decodeIfPresent([DisplayProfile].self, forKey: .displayProfiles) ?? []
+        automaticProfilesEnabled = try container
+            .decodeIfPresent(Bool.self, forKey: .automaticProfilesEnabled) ?? false
+        selectedDisplayProfileID = try container.decodeIfPresent(UUID.self, forKey: .selectedDisplayProfileID)
+    }
+
     static func defaults() -> Self {
         Self(
             mode: .macOS,

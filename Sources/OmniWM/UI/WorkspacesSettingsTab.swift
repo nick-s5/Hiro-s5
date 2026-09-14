@@ -56,6 +56,18 @@ struct WorkspacesSettingsTab: View {
 
     var body: some View {
         Form {
+            if let profile = controller.activeDisplayProfile {
+                Section {
+                    Label("Display profile: \(profile.name)", systemImage: "display.2")
+                    Text(
+                        "This profile overrides workspace monitor assignments. The assignments below are your base settings. "
+                            + "Edit the profile in Monitors → Display Profiles."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Default Layout") {
                 Picker("Layout Algorithm", selection: Bindable(settings.workspaces).defaultLayoutType) {
                     ForEach(LayoutType.allCases.filter { $0 != .defaultLayout }) { layout in

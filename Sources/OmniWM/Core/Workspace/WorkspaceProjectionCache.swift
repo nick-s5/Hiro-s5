@@ -25,6 +25,7 @@ final class WorkspaceProjectionCache {
     func invalidateMonitorProjections() {
         _cachedSortedMonitors = nil
         _cachedTopologyProfile = nil
+        _cachedMonitorDescriptionByWorkspaceName = nil
     }
 
     func invalidateSettingsProjectionCaches() {
@@ -81,7 +82,10 @@ final class WorkspaceProjectionCache {
             return cached
         }
         var descriptions: [String: MonitorDescription] = [:]
-        for configuration in manager.settings.workspaces.configurations {
+        for configuration in manager.settings.monitors.effectiveWorkspaceConfigurations(
+            manager.settings.workspaces.configurations,
+            for: manager.monitors
+        ) {
             descriptions[configuration.name] = configuration.monitorAssignment.toMonitorDescription()
         }
         _cachedMonitorDescriptionByWorkspaceName = descriptions

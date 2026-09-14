@@ -367,6 +367,9 @@ extension SettingsStore {
         pointer.constrainToArrangement = export.mouseWarp.constrainToArrangement
         monitors.routingMode = export.routing.mode
         monitors.arrangements = export.routing.arrangements
+        monitors.displayProfiles = export.routing.displayProfiles
+        monitors.automaticProfilesEnabled = export.routing.automaticProfilesEnabled
+        monitors.selectedDisplayProfileID = export.routing.selectedDisplayProfileID
         gaps.apply(export.gaps)
 
         niri.apply(export.niri, baseline: baseline.niri)

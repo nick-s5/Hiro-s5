@@ -89,6 +89,18 @@ extension WorkspaceManager {
     }
 
     func applyMonitorConfigurationChange(_ newMonitors: [Monitor]) {
+        let usesDisplayProfile = appliedDisplayProfileID != nil ||
+            settings.monitors.activeDisplayProfile(for: newMonitors) != nil
+        let profileAssignmentsChanged = usesDisplayProfile && displayProfileAssignmentsChanged(for: newMonitors)
+        if profileAssignmentsChanged {
+            prepareDisplayProfileTransition(to: newMonitors)
+        }
         _ = recordTopologyChange(to: newMonitors)
+        if profileAssignmentsChanged {
+            applySettings()
+        } else {
+            appliedWorkspaceMonitorTargets = effectiveWorkspaceMonitorTargets(for: monitors)
+            appliedDisplayProfileID = settings.monitors.activeDisplayProfile(for: monitors)?.id
+        }
     }
 }
